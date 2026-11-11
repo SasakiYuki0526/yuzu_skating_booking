@@ -325,7 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 isAdmin = false;
-                adminToggleBtn.textContent = "🔒 管理員登入";
+                adminToggleBtn.textContent = "登入";
                 adminToggleBtn.classList.remove('unlocked');
                 adminPanel.classList.add('hidden');
                 renderRightSlots(selectedDate);
