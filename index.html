@@ -33,12 +33,13 @@
                     </div>
                     
                     <!-- 時間區間選擇器 (固定 40 分鐘，結束時間唯讀) -->
+                    <!-- 時間區間選擇器 (以 10 分鐘為單位，固定 40 分鐘) -->
                     <div class="form-group">
                         <label>時間區間 (固定 40 分鐘)：</label>
                         <div style="display: flex; align-items: center; gap: 6px;">
-                            <input type="time" id="input-start-time" required style="width: 45%;">
+                            <input type="time" id="input-start-time" step="600" required style="width: 45%;">
                             <span>至</span>
-                            <input type="time" id="input-end-time" readonly required style="width: 45%; background-color: #edf2f7; cursor: not-allowed;">
+                            <input type="time" id="input-end-time" step="600" readonly required style="width: 45%; background-color: #edf2f7; cursor: not-allowed;">
                         </div>
                     </div>
 
