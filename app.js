@@ -314,9 +314,9 @@ document.addEventListener('DOMContentLoaded', () => {
         adminToggleBtn.addEventListener('click', () => {
             if (!isAdmin) {
                 const pwd = prompt("請輸入管理者密碼：");
-                if (pwd === "1234") { // 可自行更改密碼
+                if (pwd === "101010") { // 可自行更改密碼
                     isAdmin = true;
-                    adminToggleBtn.textContent = "🔓 管理者已登入";
+                    adminToggleBtn.textContent = "已登入";
                     adminToggleBtn.classList.add('unlocked');
                     adminPanel.classList.remove('hidden');
                     renderRightSlots(selectedDate);
