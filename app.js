@@ -118,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const range of specialRanges) {
             if (inputStart < range.end && inputEnd > range.start) {
                 const dayName = isWeekday ? "平日" : "假日";
-                const warningMsg = `⚠️ 提醒：您新增的時段（${timeStr}）包含或落入了【${dayName}特定時間 ${range.name}】！`;
+                const warningMsg = `⚠️ 提醒：您新增的時段（${timeStr}）為【${dayName}洗冰時間 ${range.name}】！`;
                 return confirm(`${warningMsg}\n\n請問確定仍要新增此時段嗎？`);
             }
         }
