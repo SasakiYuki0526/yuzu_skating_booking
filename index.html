@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>預約時段管理系統</title>
+    
+    <!-- FullCalendar CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/main.min.css" rel="stylesheet">
+    <!-- 專案自訂樣式 -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- FullCalendar JS -->
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+</head>
+<body>
+
+    <div class="booking-layout">
+        <!-- 左側：月曆與管理者面板區塊 -->
+        <aside class="calendar-sidebar">
+            <div class="sidebar-header">
+                <h2>預約行事曆</h2>
+                <button id="admin-toggle-btn" class="admin-btn">🔒 管理員登入</button>
+            </div>
+
+            <!-- 管理者專用面板 (預設隱藏) -->
+            <div id="admin-panel" class="admin-panel hidden">
+                <h3>新增時段設定</h3>
+                <form id="add-slot-form">
+                    <div class="form-group">
+                        <label>起始日期：</label>
+                        <input type="date" id="input-date" required>
+                    </div>
+                    
+                    <!-- 時間區間選擇器 (固定 40 分鐘，結束時間唯讀) -->
+                    <div class="form-group">
+                        <label>時間區間 (固定 40 分鐘)：</label>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <input type="time" id="input-start-time" required style="width: 45%;">
+                            <span>至</span>
+                            <input type="time" id="input-end-time" readonly required style="width: 45%; background-color: #edf2f7; cursor: not-allowed;">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="submit-btn">新增單一時段</button>
+                </form>
+
+                <hr class="panel-divider">
+
+                <!-- ⚡ 每週反覆新增區塊 -->
+                <h3>⚡ 每週反覆新增此時段</h3>
+                <p class="batch-desc">依上方設定的日期與時間，自動每週重複寫入：</p>
+                <div class="form-group">
+                    <label>重複週數：</label>
+                    <select id="repeat-weeks">
+                        <option value="4">未來 4 週 (約 1 個月)</option>
+                        <option value="8">未來 8 週 (約 2 個月)</option>
+                        <option value="12">未來 12 週 (約 3 個月)</option>
+                    </select>
+                </div>
+                <button type="button" id="batch-repeat-weekly-btn" class="batch-btn">一鍵每週反覆新增</button>
+
+                <hr class="panel-divider">
+
+                <!-- 🔒 全包場設定區塊 -->
+                <h3>🔒 指定全天包場</h3>
+                <p class="batch-desc">將上方的「起始日期」直接設定為全天包場：</p>
+                <button type="button" id="set-full-booking-btn" class="batch-btn" style="background-color: #e53e3e;">設定為全天包場</button>
+            </div>
+
+            <!-- FullCalendar 迷你月曆 -->
+            <div id="mini-calendar"></div>
+
+            <!-- 💡 月曆圖例說明 (Legend) -->
+            <div class="calendar-legend">
+                <div class="legend-item">
+                    <span class="dot-available"></span>
+                    <span>可預約</span>
+                </div>
+                <div class="legend-item">
+                    <span class="dot-booked"></span>
+                    <span>已額滿</span>
+                </div>
+                <div class="legend-item">
+                    <span class="dot-full-booked"></span>
+                    <span>全天包場</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 右側：選定日期的時段狀況展示區 -->
+        <main class="slots-main">
+            <h2 id="selected-date-title">選擇日期時段狀況</h2>
+            <div id="slots-container" class="slots-grid">
+                <!-- 預約卡片或全包場提示將由 app.js 動態渲染於此 -->
+            </div>
+        </main>
+    </div>
+
+    <!-- 載入主要邏輯 JS -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>
