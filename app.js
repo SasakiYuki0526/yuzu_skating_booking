@@ -18,13 +18,14 @@ import {
 // 1. Firebase 初始化 (請替換為您的 Firebase 專案設定)
 // ==========================================
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
-};
+    apiKey: "AIzaSyBCqdRd1sbSY7o44d_PhvYQUfGZVZg9Tkw",
+    authDomain: "skating-class.firebaseapp.com",
+    projectId: "skating-class",
+    storageBucket: "skating-class.firebasestorage.app",
+    messagingSenderId: "215138000944",
+    appId: "1:215138000944:web:39a961b1d217e5d2afcdf5",
+    measurementId: "G-2TZTT70B6C"
+  };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
