@@ -1,4 +1,4 @@
-// app.js - 完整整合版
+// app.js - 完整整合版（含編輯與批量刪除功能）
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { 
     getFirestore, 
@@ -33,10 +33,10 @@ const db = getFirestore(app);
 // ==========================================
 // 2. 全域狀態管理
 // ==========================================
-let allScheduleData = {};   // 儲存一般時段：{ '2026-11-15': [{id, time, isAvailable}, ...] }
-let fullBookingDates = new Set(); // 儲存全包場日期字串集合 Set(['2026-11-20'])
+let allScheduleData = {};   // 一般時段快取
+let fullBookingDates = new Set(); // 全包場日期集合
 let selectedDate = new Date().toISOString().split('T')[0]; // 當前選取日期 YYYY-MM-DD
-let isAdmin = false;       // 管理者狀態
+let isAdmin = false;       // 管理者登入狀態
 
 // ==========================================
 // 3. DOM 載入與初始化
@@ -52,42 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const repeatWeeklyBtn = document.getElementById('batch-repeat-weekly-btn');
     const setFullBookingBtn = document.getElementById('set-full-booking-btn');
 
-    // 預設日期填入今天
     if (inputDate) {
         inputDate.value = selectedDate;
-    }
-
-    // ------------------------------------------
-    // A. 40 分鐘自動換算邏輯
-    // ------------------------------------------
-    if (startTimeInput && endTimeInput) {
-        startTimeInput.addEventListener('change', () => {
-            const val = startTimeInput.value;
-            if (!val) {
-                endTimeInput.value = "";
-                return;
-            }
-
-            const [hours, minutes] = val.split(':').map(Number);
-            const date = new Date();
-            date.setHours(hours, minutes + 40, 0, 0);
-
-            const endHours = String(date.getHours()).padStart(2, '0');
-            const endMinutes = String(date.getMinutes()).padStart(2, '0');
-
-            endTimeInput.value = `${endHours}:${endMinutes}`;
-        });
-    }
-
-    // ------------------------------------------
-    // B. 輔助函式：時間與特定提醒判斷
-    // ------------------------------------------
-    function getTimeRangeString() {
-        if (!startTimeInput || !endTimeInput) return null;
-        const start = startTimeInput.value;
-        const end = endTimeInput.value;
-        if (!start || !end) return null;
-        return `${start} - ${end}`;
     }
 
     function timeToMinutes(timeStr) {
@@ -95,39 +61,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return h * 60 + m;
     }
 
-    // 檢查時間是否落入特定警示時段 (平日 14:40~15:00 / 假日 13:50~14:20, 16:50~17:20)
-    function checkSpecialTimeNotice(dateStr, timeStr) {
-        const [year, month, day] = dateStr.split('-').map(Number);
-        const dayOfWeek = new Date(year, month - 1, day).getDay();
-
-        const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
-        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-
-        const [startStr, endStr] = timeStr.split(' - ').map(s => s.trim());
-        const inputStart = timeToMinutes(startStr);
-        const inputEnd = timeToMinutes(endStr);
-
-        let specialRanges = [];
-        if (isWeekday) {
-            specialRanges.push({ name: "14:40 - 15:00", start: 880, end: 900 });
-        } else if (isWeekend) {
-            specialRanges.push({ name: "13:50 - 14:20", start: 830, end: 860 });
-            specialRanges.push({ name: "16:50 - 17:20", start: 1010, end: 1040 });
-        }
-
-        for (const range of specialRanges) {
-            if (inputStart < range.end && inputEnd > range.start) {
-                const dayName = isWeekday ? "平日" : "假日";
-                const warningMsg = `⚠️ 提醒：您新增的時段（${timeStr}）為${dayName}洗冰時間 ${range.name}！`;
-                return confirm(`${warningMsg}\n\n請問確定仍要新增此時段嗎？`);
-            }
-        }
-        return true;
+    function minutesToTimeString(minutes) {
+        const h = Math.floor(minutes / 60);
+        const m = minutes % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     }
 
-    // ------------------------------------------
-    // C. 初始化 FullCalendar 迷你月曆
-    // ------------------------------------------
+    // 初始化 FullCalendar 迷你月曆
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         headerToolbar: {
@@ -150,9 +90,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     calendar.render();
 
-    // ------------------------------------------
-    // D. 圓點渲染與更新邏輯
-    // ------------------------------------------
     function renderCellDots(cellEl, dateStr) {
         const frameEl = cellEl.querySelector('.fc-daygrid-day-frame');
         if (!frameEl) return;
@@ -190,9 +127,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ------------------------------------------
-    // E. 右側時段狀況渲染
-    // ------------------------------------------
+    // ==========================================
+    // 右側時段狀況渲染 (含批量操作工具列與編輯/刪除)
+    // ==========================================
     function renderRightSlots(dateStr) {
         const titleEl = document.getElementById('selected-date-title');
         const container = document.getElementById('slots-container');
@@ -233,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const slots = allScheduleData[dateStr] || [];
+        const slots = [...(allScheduleData[dateStr] || [])];
 
         if (slots.length === 0) {
             container.innerHTML = `<p class="placeholder-text">當天未排定任何時段</p>`;
@@ -242,13 +179,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
         slots.sort((a, b) => a.time.localeCompare(b.time));
 
+        // 如果是管理者模式，在最上方加入「批量操作工具列」
+        if (isAdmin) {
+            const batchToolbar = document.createElement('div');
+            batchToolbar.className = 'batch-toolbar';
+            batchToolbar.style.cssText = 'grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; background: #edf2f7; padding: 10px 14px; border-radius: 8px; margin-bottom: 8px; font-size: 0.9rem;';
+            batchToolbar.innerHTML = `
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" id="select-all-checkbox"> 全選當日時段
+                </label>
+                <button id="batch-delete-btn" class="submit-btn" style="background: #e53e3e; padding: 6px 12px; font-size: 0.85rem;" disabled>刪除所選時段</button>
+            `;
+            container.appendChild(batchToolbar);
+        }
+
         slots.forEach((slot) => {
             const card = document.createElement('div');
             const isAvail = slot.isAvailable;
-
             card.className = `slot-card ${isAvail ? 'available' : 'booked'} ${isAdmin ? 'clickable' : ''}`;
             
             card.innerHTML = `
+                ${isAdmin ? `<input type="checkbox" class="slot-select-checkbox" data-id="${slot.id}" style="margin-right: 6px;">` : ''}
                 <span>${slot.time}</span>
                 <span class="status-subtext">${isAvail ? '可預約' : '已預約'}</span>
                 ${isAdmin ? `
@@ -257,15 +208,16 @@ document.addEventListener('DOMContentLoaded', () => {
                             ? `<button class="book-btn" title="標記為已預約">🚫</button>` 
                             : `<button class="release-btn" title="釋出時段 (回復可預約)">✅</button>`
                         }
+                        <button class="edit-btn" title="編輯時段">✏️</button>
                         <button class="delete-btn" title="刪除時段">✕</button>
                     </div>
                 ` : ''}
             `;
 
             if (isAdmin) {
-                // 點擊卡片切換狀態
+                // 點擊卡片空白處切換可用狀態
                 card.addEventListener('click', async (e) => {
-                    if (e.target.closest('.admin-actions')) return;
+                    if (e.target.closest('.admin-actions') || e.target.tagName === 'INPUT') return;
                     try {
                         await updateDoc(doc(db, "schedule", slot.id), { isAvailable: !isAvail });
                     } catch (err) { console.error(err); }
@@ -291,7 +243,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
 
-                // ✕ 刪除
+                // ✏️ 編輯時段
+                const editBtn = card.querySelector('.edit-btn');
+                if (editBtn) {
+                    editBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        const newTime = prompt(`請輸入修改後的時段 (格式範例: 10:00 - 10:40)：`, slot.time);
+                        if (newTime && newTime.trim() !== "" && newTime !== slot.time) {
+                            try {
+                                await updateDoc(doc(db, "schedule", slot.id), { time: newTime.trim() });
+                                alert("時段修改成功！");
+                            } catch (err) {
+                                console.error("修改失敗：", err);
+                                alert("修改失敗，請檢查主控台。");
+                            }
+                        }
+                    });
+                }
+
+                // ✕ 單筆刪除
                 const delBtn = card.querySelector('.delete-btn');
                 if (delBtn) {
                     delBtn.addEventListener('click', async (e) => {
@@ -305,18 +275,70 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             container.appendChild(card);
         });
+
+        // 綁定批量選取與刪除事件
+        if (isAdmin) {
+            const selectAllCheckbox = document.getElementById('select-all-checkbox');
+            const batchDeleteBtn = document.getElementById('batch-delete-btn');
+            const itemCheckboxes = container.querySelectorAll('.slot-select-checkbox');
+
+            function updateBatchButtonState() {
+                const checkedCount = container.querySelectorAll('.slot-select-checkbox:checked').length;
+                if (batchDeleteBtn) {
+                    batchDeleteBtn.disabled = checkedCount === 0;
+                    batchDeleteBtn.textContent = checkedCount > 0 ? `刪除所選時段 (${checkedCount})` : `刪除所選時段`;
+                }
+            }
+
+            if (selectAllCheckbox) {
+                selectAllCheckbox.addEventListener('change', (e) => {
+                    const isChecked = e.target.checked;
+                    itemCheckboxes.forEach(cb => cb.checked = isChecked);
+                    updateBatchButtonState();
+                });
+            }
+
+            itemCheckboxes.forEach(cb => {
+                cb.addEventListener('change', () => {
+                    updateBatchButtonState();
+                    if (selectAllCheckbox) {
+                        selectAllCheckbox.checked = Array.from(itemCheckboxes).every(item => item.checked);
+                    }
+                });
+            });
+
+            if (batchDeleteBtn) {
+                batchDeleteBtn.addEventListener('click', async () => {
+                    const checkedBoxes = container.querySelectorAll('.slot-select-checkbox:checked');
+                    if (checkedBoxes.length === 0) return;
+
+                    if (confirm(`確定要刪除選取的 ${checkedBoxes.length個} 時段嗎？`)) {
+                        try {
+                            const batch = writeBatch(db);
+                            checkedBoxes.forEach(cb => {
+                                const id = cb.getAttribute('data-id');
+                                batch.delete(doc(db, "schedule", id));
+                            });
+                            await batch.commit();
+                            alert("所選時段已成功批量刪除！");
+                        } catch (err) {
+                            console.error("批量刪除失敗：", err);
+                            alert("批量刪除失敗，請檢查主控台。");
+                        }
+                    }
+                });
+            }
+        }
     }
 
-    // ------------------------------------------
-    // F. 管理者切換與解鎖
-    // ------------------------------------------
+    // 管理者面板登入切換
     if (adminToggleBtn) {
         adminToggleBtn.addEventListener('click', () => {
             if (!isAdmin) {
                 const pwd = prompt("請輸入管理者密碼：");
-                if (pwd === "101010") { // 可自行更改密碼
+                if (pwd === "1234") {
                     isAdmin = true;
-                    adminToggleBtn.textContent = "已登入";
+                    adminToggleBtn.textContent = "🔓 管理者已登入";
                     adminToggleBtn.classList.add('unlocked');
                     adminPanel.classList.remove('hidden');
                     renderRightSlots(selectedDate);
@@ -325,7 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 isAdmin = false;
-                adminToggleBtn.textContent = "登入";
+                adminToggleBtn.textContent = "🔒 管理員登入";
                 adminToggleBtn.classList.remove('unlocked');
                 adminPanel.classList.add('hidden');
                 renderRightSlots(selectedDate);
@@ -333,58 +355,125 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ------------------------------------------
-    // G. 表單動作：單筆新增
-    // ------------------------------------------
+    // 長時段自動切片批次新增 (含洗冰避讓與 <20分過濾)
     if (addSlotForm) {
         addSlotForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const dateVal = inputDate.value;
-            const timeVal = getTimeRangeString();
+            const startVal = startTimeInput.value;
+            const endVal = endTimeInput.value;
 
-            if (!dateVal || !timeVal) {
-                alert("請完整選擇開始與結束時間！");
+            if (!dateVal || !startVal || !endVal) {
+                alert("請完整選擇日期與總開始/結束時間！");
                 return;
             }
 
-            if (!checkSpecialTimeNotice(dateVal, timeVal)) return;
+            const totalStartMin = timeToMinutes(startVal);
+            const totalEndMin = timeToMinutes(endVal);
 
-            const existingSlots = allScheduleData[dateVal] || [];
-            if (existingSlots.some(slot => slot.time === timeVal)) {
-                alert(`新增失敗：${dateVal} 已經存在「${timeVal}」時段！`);
+            if (totalStartMin >= totalEndMin) {
+                alert("結束時間必須大於開始時間！");
+                return;
+            }
+
+            const [year, month, day] = dateVal.split('-').map(Number);
+            const dayOfWeek = new Date(year, month - 1, day).getDay();
+            const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+            let iceBreaks = [];
+            if (isWeekday) {
+                iceBreaks.push({ start: 880, end: 900 }); // 14:40 - 15:00
+            } else if (isWeekend) {
+                iceBreaks.push({ start: 830, end: 860 });  // 13:50 - 14:20
+                iceBreaks.push({ start: 1010, end: 1040 }); // 16:50 - 17:20
+            }
+
+            let currentStart = totalStartMin;
+            const slotsToCreate = [];
+
+            while (currentStart + 40 <= totalEndMin) {
+                let currentEnd = currentStart + 40;
+                let hitIceBreak = false;
+
+                for (let ice of iceBreaks) {
+                    if (currentStart < ice.end && currentEnd > ice.start) {
+                        currentStart = ice.end;
+                        hitIceBreak = true;
+                        break;
+                    }
+                }
+
+                if (hitIceBreak) continue;
+
+                slotsToCreate.push(`${minutesToTimeString(currentStart)} - ${minutesToTimeString(currentEnd)}`);
+                currentStart = currentEnd;
+            }
+
+            const remainingMins = totalEndMin - currentStart;
+            if (remainingMins > 0 && remainingMins < 20) {
+                console.log(`最後剩餘 ${remainingMins} 分鐘，不足 20 分鐘已自動略過。`);
+            }
+
+            if (slotsToCreate.length === 0) {
+                alert("在您選取的區間內沒有產生任何有效時段（可能全被洗冰時間覆蓋或區間小於 40 分鐘）。");
+                return;
+            }
+
+            const previewText = slotsToCreate.join('\n');
+            if (!confirm(`系統將為您自動切片並新增以下 ${slotsToCreate.length} 個時段：\n\n${previewText}\n\n確定要寫入資料庫嗎？`)) {
                 return;
             }
 
             try {
-                await addDoc(collection(db, "schedule"), {
-                    date: dateVal,
-                    time: timeVal,
-                    isAvailable: true
-                });
-                alert("新增時段成功！");
+                const batch = writeBatch(db);
+                const scheduleRef = collection(db, "schedule");
+                const existingSlots = allScheduleData[dateVal] || [];
+                let addedCount = 0;
+                let skippedCount = 0;
+
+                for (const timeStr of slotsToCreate) {
+                    const isDuplicate = existingSlots.some(slot => slot.time === timeStr);
+                    if (isDuplicate) {
+                        skippedCount++;
+                    } else {
+                        const newDocRef = doc(scheduleRef);
+                        batch.set(newDocRef, {
+                            date: dateVal,
+                            time: timeStr,
+                            isAvailable: true
+                        });
+                        addedCount++;
+                    }
+                }
+
+                if (addedCount > 0) await batch.commit();
+
+                let msg = `批次自動切片完成！\n成功新增：${addedCount} 個時段`;
+                if (skippedCount > 0) msg += `\n自動跳過（已存在）：${skippedCount} 個時段`;
+                alert(msg);
+
             } catch (error) {
-                console.error("新增失敗：", error);
+                console.error("批次新增失敗：", error);
+                alert("新增失敗，請檢查主控台錯誤。");
             }
         });
     }
 
-    // ------------------------------------------
-    // H. 表單動作：一鍵每週反覆新增
-    // ------------------------------------------
+    // 每週反覆新增
     if (repeatWeeklyBtn) {
         repeatWeeklyBtn.addEventListener('click', async () => {
             const baseDateStr = inputDate.value;
-            const timeVal = getTimeRangeString();
+            const startVal = startTimeInput.value;
+            const endVal = endTimeInput.value;
             const weeks = parseInt(document.getElementById('repeat-weeks').value, 10);
 
-            if (!baseDateStr || !timeVal) {
-                alert("請先選擇「起始日期」與完整的「開始/結束時間」！");
+            if (!baseDateStr || !startVal || !endVal) {
+                alert("請先選擇「起始日期」與完整的「總起訖時間」！");
                 return;
             }
 
-            if (!checkSpecialTimeNotice(baseDateStr, timeVal)) return;
-
-            if (!confirm(`確定要從 ${baseDateStr} 開始，將時段「${timeVal}」連續新增未來 ${weeks} 週嗎？`)) {
+            if (!confirm(`確定要從 ${baseDateStr} 開始，將此時間區間自動切片並連續重複新增未來 ${weeks} 週嗎？`)) {
                 return;
             }
 
@@ -395,8 +484,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const [year, month, day] = baseDateStr.split('-').map(Number);
                 let currentDate = new Date(year, month - 1, day);
 
-                let addedCount = 0;
-                let skippedCount = 0;
+                let totalAdded = 0;
+                let totalSkipped = 0;
 
                 for (let i = 0; i < weeks; i++) {
                     const y = currentDate.getFullYear();
@@ -404,36 +493,64 @@ document.addEventListener('DOMContentLoaded', () => {
                     const d = String(currentDate.getDate()).padStart(2, '0');
                     const targetDateStr = `${y}-${m}-${d}`;
 
-                    const existingSlots = allScheduleData[targetDateStr] || [];
-                    if (existingSlots.some(slot => slot.time === timeVal)) {
-                        skippedCount++;
-                    } else {
-                        const newDocRef = doc(scheduleRef);
-                        batch.set(newDocRef, {
-                            date: targetDateStr,
-                            time: timeVal,
-                            isAvailable: true
-                        });
-                        addedCount++;
+                    const dayOfWeek = currentDate.getDay();
+                    const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+                    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+                    let iceBreaks = [];
+                    if (isWeekday) iceBreaks.push({ start: 880, end: 900 });
+                    else if (isWeekend) {
+                        iceBreaks.push({ start: 830, end: 860 });
+                        iceBreaks.push({ start: 1010, end: 1040 });
                     }
+
+                    let curStart = timeToMinutes(startVal);
+                    const tEnd = timeToMinutes(endVal);
+                    const daySlotsToCreate = [];
+
+                    while (curStart + 40 <= tEnd) {
+                        let curEnd = curStart + 40;
+                        let hit = false;
+                        for (let ice of iceBreaks) {
+                            if (curStart < ice.end && curEnd > ice.start) {
+                                curStart = ice.end;
+                                hit = true;
+                                break;
+                            }
+                        }
+                        if (hit) continue;
+                        daySlotsToCreate.push(`${minutesToTimeString(curStart)} - ${minutesToTimeString(curEnd)}`);
+                        curStart = curEnd;
+                    }
+
+                    const existingSlots = allScheduleData[targetDateStr] || [];
+                    for (const timeStr of daySlotsToCreate) {
+                        if (existingSlots.some(s => s.time === timeStr)) {
+                            totalSkipped++;
+                        } else {
+                            const newDocRef = doc(scheduleRef);
+                            batch.set(newDocRef, {
+                                date: targetDateStr,
+                                time: timeStr,
+                                isAvailable: true
+                            });
+                            totalAdded++;
+                        }
+                    }
+
                     currentDate.setDate(currentDate.getDate() + 7);
                 }
 
-                if (addedCount > 0) await batch.commit();
-
-                let resultMsg = `批次處理完成！\n成功新增：${addedCount} 個週次`;
-                if (skippedCount > 0) resultMsg += `\n自動跳過（已存在相同時段）：${skippedCount} 個週次`;
-                alert(resultMsg);
+                if (totalAdded > 0) await batch.commit();
+                alert(`批次每週反覆新增完成！\n總共成功新增：${totalAdded} 個時段\n跳過重複：${totalSkipped} 個`);
 
             } catch (error) {
-                console.error("批量新增失敗：", error);
+                console.error("每週批次新增失敗：", error);
             }
         });
     }
 
-    // ------------------------------------------
-    // I. 表單動作：一鍵設定全包場
-    // ------------------------------------------
+    // 一鍵設定全包場
     if (setFullBookingBtn) {
         setFullBookingBtn.addEventListener('click', async () => {
             const dateVal = inputDate.value;
@@ -456,9 +573,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ------------------------------------------
-    // J. Firebase 即時連動 (schedule + fullBookings)
-    // ------------------------------------------
+    // Firebase 即時連動
     onSnapshot(collection(db, "schedule"), (snapshot) => {
         allScheduleData = {};
         snapshot.forEach((doc) => {
