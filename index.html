@@ -100,13 +100,52 @@
         </aside>
 
         <!-- 右側：選定日期的時段狀況展示區 -->
-        <main class="slots-main">
-            <h2 id="selected-date-title">選擇日期時段狀況</h2>
-            <div id="slots-container" class="slots-grid">
-                <!-- 預約卡片或全包場提示將由 app.js 動態渲染於此 -->
+        <div class="slots-main">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px;">
+                <h2 id="selected-date-title" style="margin-bottom: 0;">時段狀況</h2>
+                <span style="font-size: 0.85rem; color: #718096;">點選時段可直接預約課程</span>
             </div>
-        </main>
+            <div id="slots-container" class="slots-grid">
+                <!-- 動態時段卡片 -->
+            </div>
+            <!-- 增加每個月26號更新的備註 -->
+            <div style="margin-top: 16px; font-size: 0.8rem; color: #a0aec0; text-align: right;">
+                ＊每個月26號會更新下個月可預約時間
+            </div>
+        </div>
     </div>
+
+    <!-- 💡 一般訪客：預約填寫姓名彈窗 -->
+    <div id="booking-modal" class="custom-modal hidden">
+        <div class="modal-content">
+            <h3>預約時段</h3>
+            <p id="modal-slot-info" style="margin: 8px 0; color: #4a5568; font-size: 0.9rem;"></p>
+            <form id="booking-form">
+                <div class="form-group">
+                    <label>學生姓名：</label>
+                    <input type="text" id="booking-student-name" placeholder="請輸入學生姓名" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="modal-cancel-btn" class="submit-btn" style="background: #cbd5e0; color: #2d3748;">取消</button>
+                    <button type="submit" class="submit-btn">確認預約</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 💡 管理者：檢視預約情形浮動頁面 -->
+    <div id="admin-booking-modal" class="custom-modal hidden">
+        <div class="modal-content">
+            <h3>預約學員名單</h3>
+            <p id="admin-modal-slot-info" style="margin: 8px 0; color: #4a5568; font-size: 0.9rem;"></p>
+            <div id="admin-booking-list" style="margin: 12px 0; max-height: 200px; overflow-y: auto;">
+                <!-- 動態載入預約名單與勾選確認框 -->
+            </div>
+            <div class="modal-actions">
+                <button type="button" id="admin-modal-close-btn" class="submit-btn">關閉</button>
+            </div>
+        </div>
+    </div>  
 
     <!-- 載入主要邏輯 JS -->
     <script type="module" src="app.js"></script>
