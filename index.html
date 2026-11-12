@@ -1,18 +1,20 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>預約時段管理系統</title>
-    
+
     <!-- FullCalendar CSS -->
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/main.min.css" rel="stylesheet">
     <!-- 專案自訂樣式 -->
     <link rel="stylesheet" href="style.css">
-    
+
     <!-- FullCalendar JS -->
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
 </head>
+
 <body>
 
     <div class="booking-layout">
@@ -31,15 +33,15 @@
                         <label>起始日期：</label>
                         <input type="date" id="input-date" required>
                     </div>
-                    
+
                     <!-- 時間區間選擇器 (固定 40 分鐘，結束時間唯讀) -->
-                    <!-- 時間區間選擇器 (以 10 分鐘為單位，固定 40 分鐘) -->
+                    <!-- 時間區間選擇器 (以 10 分鐘為單位，可自由設定起訖) -->
                     <div class="form-group">
-                        <label>時間區間 (固定 40 分鐘)：</label>
+                        <label>總時間區間 (自動每 40 分鐘切片)：</label>
                         <div style="display: flex; align-items: center; gap: 6px;">
                             <input type="time" id="input-start-time" step="600" required style="width: 45%;">
                             <span>至</span>
-                            <input type="time" id="input-end-time" step="600" readonly required style="width: 45%; background-color: #edf2f7; cursor: not-allowed;">
+                            <input type="time" id="input-end-time" step="600" required style="width: 45%;">
                         </div>
                     </div>
 
@@ -66,7 +68,8 @@
                 <!-- 🔒 全包場設定區塊 -->
                 <h3>🔒 指定全天包場</h3>
                 <p class="batch-desc">將上方的「起始日期」直接設定為全天包場：</p>
-                <button type="button" id="set-full-booking-btn" class="batch-btn" style="background-color: #e53e3e;">設定為全天包場</button>
+                <button type="button" id="set-full-booking-btn" class="batch-btn"
+                    style="background-color: #e53e3e;">設定為全天包場</button>
             </div>
 
             <!-- FullCalendar 迷你月曆 -->
@@ -108,4 +111,5 @@
     <!-- 載入主要邏輯 JS -->
     <script type="module" src="app.js"></script>
 </body>
+
 </html>
