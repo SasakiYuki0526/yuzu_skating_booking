@@ -465,16 +465,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 管理者面板登入切換
+        // 管理者面板登入切換
     if (adminToggleBtn) {
         adminToggleBtn.addEventListener('click', () => {
             if (!isAdmin) {
                 const pwd = prompt("請輸入管理者密碼：");
-                if (pwd === "101010") {
+                if (pwd === "1234") {
                     isAdmin = true;
                     adminToggleBtn.textContent = "🔓 管理者已登入";
                     adminToggleBtn.classList.add('unlocked');
                     adminPanel.classList.remove('hidden');
+                    
+                    // 💡 關鍵：登入成功時，在 body 加上 admin-mode 類別讓卡片變大
+                    document.body.classList.add('admin-mode');
+                    
                     renderRightSlots(selectedDate);
                 } else if (pwd !== null) {
                     alert("密碼錯誤！");
@@ -484,6 +488,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 adminToggleBtn.textContent = "🔒 管理員登入";
                 adminToggleBtn.classList.remove('unlocked');
                 adminPanel.classList.add('hidden');
+                
+                // 💡 關鍵：登出時，移除 admin-mode 類別恢復原狀
+                document.body.classList.remove('admin-mode');
+                
                 renderRightSlots(selectedDate);
             }
         });
