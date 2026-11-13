@@ -487,6 +487,33 @@ body {
     flex: 1;
 }
 
+/* --------------------------------------------------
+   時段卡片響應式與管理員專用放大樣式
+-------------------------------------------------- */
+.slots-grid {
+    display: grid;
+    /* 一般訪客模式下維持標準格子大小 */
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+/* 當 body 被加上 admin-mode class 時，網格自動調整為較大尺寸 */
+body.admin-mode .slots-grid {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.slot-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: transform 0.1s;
+    min-height: 48px; /* 確保有足夠的高度 */
+}
+
 /* 管理員模式下：讓已預約卡片改為上下垂直排列或更寬敞，容納長名字 */
 body.admin-mode .slot-card.booked {
     flex-direction: column;
