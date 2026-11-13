@@ -122,11 +122,24 @@
             <p id="modal-slot-info" style="margin: 8px 0; color: #4a5568; font-size: 0.9rem;"></p>
             <form id="booking-form">
                 <div class="form-group">
+                    <div style="margin-bottom: 12px;">
+                        <label for="booking-type"
+                            style="display: block; font-size: 0.9rem; margin-bottom: 4px; color: #4a5568;">課程類型：</label>
+                        <select id="booking-type"
+                            style="width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 0.95rem;">
+                            <option value="1v1">1v1</option>
+                            <option value="1v2">1v2</option>
+                            <option value="1v3">1v3</option>
+                        </select>
+                    </div>
                     <label>學生姓名：</label>
                     <input type="text" id="booking-student-name" placeholder="請輸入學生姓名" required>
+                    <!-- 在輸入姓名的 div 或 input 下方加入這段選單 -->
+                    
                 </div>
                 <div class="modal-actions">
-                    <button type="button" id="modal-cancel-btn" class="submit-btn" style="background: #cbd5e0; color: #2d3748;">取消</button>
+                    <button type="button" id="modal-cancel-btn" class="submit-btn"
+                        style="background: #cbd5e0; color: #2d3748;">取消</button>
                     <button type="submit" class="submit-btn">確認預約</button>
                 </div>
             </form>
@@ -145,7 +158,7 @@
                 <button type="button" id="admin-modal-close-btn" class="submit-btn">關閉</button>
             </div>
         </div>
-    </div>  
+    </div>
 
     <!-- 載入主要邏輯 JS -->
     <script type="module" src="app.js"></script>
