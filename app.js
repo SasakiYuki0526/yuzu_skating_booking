@@ -59,6 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalSlotInfo = document.getElementById('modal-slot-info');
     const modalCancelBtn = document.getElementById('modal-cancel-btn');
     const studentNameInput = document.getElementById('booking-student-name');
+    const bookingTypeSelect = document.getElementById('booking-type');
 
     // 管理者檢視預約浮動頁面 DOM
     const adminBookingModal = document.getElementById('admin-booking-modal');
@@ -422,6 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
         bookingForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const studentName = studentNameInput.value.trim();
+            const lessonType = bookingTypeSelect ? bookingTypeSelect.value : "1v1"; // 👈 取得選取的 1v1 / 1v2 / 1v3
             if (!studentName || !currentBookingSlotId) return;
 
             let targetSlotInfo = "未知時段";
@@ -434,27 +436,33 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             try {
-                // 1. 更新 Firebase 資料庫
+                // 1. 更新 Firebase 資料庫（同時記錄 studentName 與 lessonType）
                 await updateDoc(doc(db, "schedule", currentBookingSlotId), {
                     isAvailable: false,
-                    studentName: studentName
+                    studentName: studentName,
+                    lessonType: lessonType // 👈 將課程類型存入資料庫
                 });
 
-                // 2. 發送 Discord 新預約通知
-                const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1570461741995917352/gdHO5nE9_leWt1viBpDxAKE1lAzg67I7UiosB9uQ5d_T7g2588qYNc6F3_CNw7-CRyM2";
-                const message = `🔔 **【新預約通知】**\n👤 **學員姓名**：${studentName}\n⏰ **${targetSlotInfo}**`;
-                
-                await fetch(DISCORD_WEBHOOK_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ content: message })
-                });
+                // 2. 組合 Discord 新預約通知（自動帶入 1v1 / 1v2 / 1v3 標籤）
+                try {
+                    const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1570461741995917352/gdHO5nE9_leWt1viBpDxAKE1lAzg67I7UiosB9uQ5d_T7g2588qYNc6F3_CNw7-CRyM2";
+                    const message = `🔔 **【新預約通知】**\n🏷️ **課程類型**：\`${lessonType}\`\n👤 **學員姓名**：${studentName}\n⏰ **${targetSlotInfo}**`;
+                    
+                    await fetch(DISCORD_WEBHOOK_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content: message })
+                    });
+                } catch (discordErr) {
+                    console.warn("Discord 通知發送失敗，但預約已成功寫入：", discordErr);
+                }
 
                 bookingModal.classList.add('hidden');
                 alert(`預約成功！`);
+                
             } catch (err) {
-                console.error("預約或發送通知失敗：", err);
-                alert("預約成功！");
+                console.error("預約寫入失敗：", err);
+                alert("預約失敗，請稍後再試。");
             }
         });
     }
@@ -465,12 +473,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-        // 管理者面板登入切換
+    // 管理者面板登入切換
     if (adminToggleBtn) {
         adminToggleBtn.addEventListener('click', () => {
             if (!isAdmin) {
                 const pwd = prompt("請輸入管理者密碼：");
-                if (pwd === "1234") {
+                if (pwd === "101010") {
                     isAdmin = true;
                     adminToggleBtn.textContent = "🔓 管理者已登入";
                     adminToggleBtn.classList.add('unlocked');
