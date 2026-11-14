@@ -1,4 +1,4 @@
-// app.js - 完整最終整合版（含預約取消通知與管理者編輯姓名功能）
+// app.js - 完整最終整合版（含姓名隱私遮罩與動態多學生姓名欄位）
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { 
     getFirestore, 
@@ -15,7 +15,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ==========================================
-// 1. Firebase 初始化 (請替換為您的 Firebase 專案設定)
+// 1. Firebase 初始化
 // ==========================================
 const firebaseConfig = {
     apiKey: "AIzaSyBCqdRd1sbSY7o44d_PhvYQUfGZVZg9Tkw",
@@ -25,19 +25,40 @@ const firebaseConfig = {
     messagingSenderId: "215138000944",
     appId: "1:215138000944:web:39a961b1d217e5d2afcdf5",
     measurementId: "G-2TZTT70B6C"
-  };
+};
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // ==========================================
-// 2. 全域狀態管理
+// 2. 全域狀態管理與輔助函式
 // ==========================================
-let allScheduleData = {};   // 一般時段快取
-let fullBookingDates = new Set(); // 全包場日期集合
-let isAdmin = false;       // 管理者登入狀態
-let currentBookingSlotId = null; // 當前正在預約或檢視的時段 ID
-let selectedDate = new Date().toISOString().split('T')[0]; // 預設選中今天
+let allScheduleData = {};
+let fullBookingDates = new Set();
+let isAdmin = false;
+let currentBookingSlotId = null;
+
+// 使用本地時間初始化預設選取日期，避免跨日誤差
+const todayObj = new Date();
+let selectedDate = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, '0')}-${String(todayObj.getDate()).padStart(2, '0')}`;
+
+/**
+ * 💡 姓名隱私遮罩函式 (ex. 琳小清 -> 琳＊清，支援多人以頓號隔開)
+ */
+function maskName(nameStr) {
+    if (!nameStr) return '';
+    return nameStr.split('、').map(singleName => {
+        const name = singleName.trim();
+        if (name.length <= 1) return name;
+        if (name.length === 2) {
+            return name[0] + '＊';
+        }
+        const first = name[0];
+        const last = name[name.length - 1];
+        const stars = '＊'.repeat(name.length - 2);
+        return first + stars + last;
+    }).join('、');
+}
 
 // ==========================================
 // 3. DOM 載入與初始化
@@ -58,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const bookingForm = document.getElementById('booking-form');
     const modalSlotInfo = document.getElementById('modal-slot-info');
     const modalCancelBtn = document.getElementById('modal-cancel-btn');
-    const studentNameInput = document.getElementById('booking-student-name');
+    const originalStudentNameInput = document.getElementById('booking-student-name');
     const bookingTypeSelect = document.getElementById('booking-type');
 
     // 管理者檢視預約浮動頁面 DOM
@@ -66,6 +87,45 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminModalSlotInfo = document.getElementById('admin-modal-slot-info');
     const adminBookingList = document.getElementById('admin-booking-list');
     const adminModalCloseBtn = document.getElementById('admin-modal-close-btn');
+
+    // ==========================================
+    // 動態多學生姓名欄位初始化
+    // ==========================================
+    let studentInputsContainer = document.getElementById('dynamic-student-inputs');
+    if (!studentInputsContainer && originalStudentNameInput) {
+        studentInputsContainer = document.createElement('div');
+        studentInputsContainer.id = 'dynamic-student-inputs';
+        studentInputsContainer.style.cssText = 'display: flex; flex-direction: column; gap: 8px; margin-top: 6px;';
+        originalStudentNameInput.parentNode.insertBefore(studentInputsContainer, originalStudentNameInput);
+        originalStudentNameInput.remove();
+    }
+
+    function renderStudentNameInputs(lessonTypeStr) {
+        if (!studentInputsContainer) return;
+        studentInputsContainer.innerHTML = '';
+
+        const match = String(lessonTypeStr).match(/1v(\d+)/i);
+        const count = match ? Math.max(1, parseInt(match[1], 10)) : 1;
+
+        for (let i = 1; i <= count; i++) {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'booking-student-name-item';
+            input.required = true;
+            input.placeholder = count === 1 ? '請輸入學員姓名' : `請輸入第 ${i} 位學員姓名`;
+            input.style.cssText = 'width: 100%; padding: 8px 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;';
+            studentInputsContainer.appendChild(input);
+        }
+    }
+
+    if (bookingTypeSelect) {
+        bookingTypeSelect.addEventListener('change', (e) => {
+            renderStudentNameInputs(e.target.value);
+        });
+        renderStudentNameInputs(bookingTypeSelect.value);
+    } else {
+        renderStudentNameInputs('1v1');
+    }
 
     if (inputDate) {
         inputDate.value = selectedDate;
@@ -98,7 +158,6 @@ document.addEventListener('DOMContentLoaded', () => {
             renderRightSlots(selectedDate);
         },
         dayCellDidMount: function(info) {
-            // 💡 使用本地時間計算年份、月份、日期，徹底避開 UTC 時區差導致的日期偏移
             const d = info.date;
             const year = d.getFullYear();
             const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -218,12 +277,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const isAvail = slot.isAvailable;
             card.className = `slot-card ${isAvail ? 'available' : 'booked'} clickable`;
             
-            const statusText = isAvail ? '可預約' : (isAdmin && slot.studentName ? `已預約 (${slot.studentName})` : '已預約');
+            // 💡 狀態文字顯示：一般使用者看到遮罩姓名 (ex. [1v1] 琳＊清)，管理者看到完整姓名
+            const typeTag = slot.lessonType ? `[${slot.lessonType}] ` : '';
+            let statusText = '可預約';
+            if (!isAvail) {
+                if (isAdmin) {
+                    statusText = slot.studentName ? `已預約 (${slot.studentName})` : '已預約';
+                } else {
+                    statusText = slot.studentName ? `${typeTag}${maskName(slot.studentName)}` : '已預約';
+                }
+            }
 
             card.innerHTML = `
                 ${isAdmin ? `<input type="checkbox" class="slot-select-checkbox" data-id="${slot.id}" style="margin-right: 6px;" onclick="event.stopPropagation()">` : ''}
                 <span>${slot.time}</span>
-                <span class="status-subtext">${statusText}</span>
+                <span class="status-subtext" style="font-size: 0.85rem; font-weight: 500;">${statusText}</span>
                 ${isAdmin ? `
                     <div class="admin-actions">
                         <button class="edit-btn" title="編輯時段">✏️</button>
@@ -243,7 +311,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     currentBookingSlotId = slot.id;
                     modalSlotInfo.textContent = `日期：${dateStr} ｜ 時段：${slot.time}`;
-                    studentNameInput.value = "";
+                    
+                    if (bookingTypeSelect) {
+                        bookingTypeSelect.selectedIndex = 0;
+                        renderStudentNameInputs(bookingTypeSelect.value);
+                    } else {
+                        renderStudentNameInputs('1v1');
+                    }
+                    
                     bookingModal.classList.remove('hidden');
                 } else {
                     if (isAvail) {
@@ -251,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
                     currentBookingSlotId = slot.id;
-                    adminModalSlotInfo.textContent = `日期：${dateStr} ｜ 時段：${slot.time}`;
+                    adminModalSlotInfo.textContent = `日期：${dateStr} ｜ 時段：${slot.time} ${slot.lessonType ? `(${slot.lessonType})` : ''}`;
                     
                     adminBookingList.innerHTML = `
                         <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; background: #f7fafc; border-radius: 8px;">
@@ -301,7 +376,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                                         await updateDoc(doc(db, "schedule", currentBookingSlotId), {
                                             isAvailable: true,
-                                            studentName: ""
+                                            studentName: "",
+                                            lessonType: ""
                                         });
 
                                         const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1570461741995917352/gdHO5nE9_leWt1viBpDxAKE1lAzg67I7UiosB9uQ5d_T7g2588qYNc6F3_CNw7-CRyM2";
@@ -394,7 +470,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const checkedBoxes = container.querySelectorAll('.slot-select-checkbox:checked');
                     if (checkedBoxes.length === 0) return;
 
-                    if (confirm(`確定要選取的 ${checkedBoxes.length} 個時段嗎？`)) {
+                    if (confirm(`確定要刪除選取的 ${checkedBoxes.length} 個時段嗎？`)) {
                         try {
                             const batch = writeBatch(db);
                             checkedBoxes.forEach(cb => {
@@ -424,9 +500,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (bookingForm) {
         bookingForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const studentName = studentNameInput.value.trim();
+            
+            const nameInputs = document.querySelectorAll('.booking-student-name-item');
+            const names = Array.from(nameInputs)
+                .map(input => input.value.trim())
+                .filter(name => name !== "");
+
             const lessonType = bookingTypeSelect ? bookingTypeSelect.value : "1v1";
-            if (!studentName || !currentBookingSlotId) return;
+            
+            if (names.length < nameInputs.length || !currentBookingSlotId) {
+                alert("請完整填寫所有學員姓名！");
+                return;
+            }
+
+            const combinedStudentNames = names.join('、');
 
             let targetSlotInfo = "未知時段";
             for (const date in allScheduleData) {
@@ -440,13 +527,13 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 await updateDoc(doc(db, "schedule", currentBookingSlotId), {
                     isAvailable: false,
-                    studentName: studentName,
+                    studentName: combinedStudentNames,
                     lessonType: lessonType
                 });
 
                 try {
                     const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1570461741995917352/gdHO5nE9_leWt1viBpDxAKE1lAzg67I7UiosB9uQ5d_T7g2588qYNc6F3_CNw7-CRyM2";
-                    const message = `🔔 **【新預約通知】**\n🏷️ **課程類型**：\`${lessonType}\`\n👤 **學員姓名**：${studentName}\n⏰ **${targetSlotInfo}**`;
+                    const message = `🔔 **【新預約通知】**\n🏷️ **課程類型**：\`${lessonType}\`\n👤 **學員姓名**：${combinedStudentNames}\n⏰ **${targetSlotInfo}**`;
                     
                     await fetch(DISCORD_WEBHOOK_URL, {
                         method: 'POST',
@@ -672,7 +759,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (totalAdded > 0) await batch.commit();
-                alert(`每週反覆新增完成！\n總共成功新增：${totalAdded} 個時段`);
+                alert(`批次每週反覆新增完成！\n總共成功新增：${totalAdded} 個時段`);
 
             } catch (error) {
                 console.error("每週批次新增失敗：", error);
