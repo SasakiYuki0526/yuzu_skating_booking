@@ -1,4 +1,4 @@
-// app.js - 完整最終整合版（支援團體課/團體體驗課、4格起跳可往上增加、姓名隱私遮罩）
+// app.js - 完整最終整合版（含完整區間不開放時段、團體課、姓名隱私遮罩）
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { 
     getFirestore, 
@@ -60,6 +60,18 @@ function maskName(nameStr) {
     }).join('、');
 }
 
+function timeToMinutes(timeStr) {
+    if (!timeStr || !timeStr.includes(':')) return 0;
+    const [h, m] = timeStr.split(':').map(Number);
+    return h * 60 + m;
+}
+
+function minutesToTimeString(minutes) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
 // ==========================================
 // 3. DOM 載入與初始化
 // ==========================================
@@ -73,6 +85,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const endTimeInput = document.getElementById('input-end-time');
     const repeatWeeklyBtn = document.getElementById('batch-repeat-weekly-btn');
     const setFullBookingBtn = document.getElementById('set-full-booking-btn');
+
+    // 自動在管理者面板注入「指定時段不開放」按鈕
+    let setPartialBlockBtn = document.getElementById('set-partial-block-btn');
+    if (!setPartialBlockBtn && addSlotForm) {
+        setPartialBlockBtn = document.createElement('button');
+        setPartialBlockBtn.id = 'set-partial-block-btn';
+        setPartialBlockBtn.type = 'button';
+        setPartialBlockBtn.className = 'submit-btn';
+        setPartialBlockBtn.style.cssText = 'background: #dd6b20; margin-top: 8px; width: 100%;';
+        setPartialBlockBtn.textContent = '🔒 設定指定時段不開放 (完整區間不切分)';
+        addSlotForm.appendChild(setPartialBlockBtn);
+    }
 
     // 訪客預約彈窗 DOM
     const bookingModal = document.getElementById('booking-modal');
@@ -89,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminModalCloseBtn = document.getElementById('admin-modal-close-btn');
 
     // ==========================================
-    // 💡 自動擴充下拉選單：加入「團體課」、「團體體驗課」
+    // 自動擴充下拉選單：加入「團體課」、「團體體驗課」
     // ==========================================
     if (bookingTypeSelect) {
         const extraOptions = ['團體課', '團體體驗課'];
@@ -105,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // 💡 動態多學生姓名欄位初始化（含團體課4格起跳與往上增加按鈕）
+    // 動態多學生姓名欄位初始化
     // ==========================================
     let studentInputsContainer = document.getElementById('dynamic-student-inputs');
     if (!studentInputsContainer && originalStudentNameInput) {
@@ -140,7 +164,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const isGroupClass = typeStr.includes('團體');
 
         if (isGroupClass) {
-            // 團體課 / 團體體驗課：基本 4 格，並附上「+ 增加學員欄位」按鈕可往上增加
             const baseCount = 4;
             const listWrapper = document.createElement('div');
             listWrapper.id = 'group-student-list';
@@ -165,7 +188,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             studentInputsContainer.appendChild(addMoreBtn);
         } else {
-            // 1v1, 1v2, 1v3... 依數字產生對應格數
             const match = typeStr.match(/1v(\d+)/i);
             const count = match ? Math.max(1, parseInt(match[1], 10)) : 1;
 
@@ -186,17 +208,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (inputDate) {
         inputDate.value = selectedDate;
-    }
-
-    function timeToMinutes(timeStr) {
-        const [h, m] = timeStr.split(':').map(Number);
-        return h * 60 + m;
-    }
-
-    function minutesToTimeString(minutes) {
-        const h = Math.floor(minutes / 60);
-        const m = minutes % 60;
-        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     }
 
     // 初始化 FullCalendar 迷你月曆
@@ -314,7 +325,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        slots.sort((a, b) => a.time.localeCompare(b.time));
+        // 💡 依據時段的開始時間嚴格排序
+        slots.sort((a, b) => {
+            const startA = timeToMinutes(a.time.split(' - ')[0]);
+            const startB = timeToMinutes(b.time.split(' - ')[0]);
+            return startA - startB;
+        });
 
         if (isAdmin) {
             const batchToolbar = document.createElement('div');
@@ -334,12 +350,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const isAvail = slot.isAvailable;
             card.className = `slot-card ${isAvail ? 'available' : 'booked'} clickable`;
             
-            const typeTag = slot.lessonType ? `[${slot.lessonType}] ` : '';
+            const isBlocked = !isAvail && (slot.studentName === "不開放" || slot.lessonType === "不開放");
+
             let statusText = '可預約';
             if (!isAvail) {
-                if (isAdmin) {
+                if (isBlocked) {
+                    statusText = '全場不開放';
+                } else if (isAdmin) {
+                    const typeTag = slot.lessonType ? `[${slot.lessonType}] ` : '';
                     statusText = slot.studentName ? `已預約 ${typeTag}(${slot.studentName})` : '已預約';
                 } else {
+                    const typeTag = slot.lessonType ? `[${slot.lessonType}] ` : '';
                     statusText = slot.studentName ? `${typeTag}${maskName(slot.studentName)}` : '已預約';
                 }
             }
@@ -347,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
             card.innerHTML = `
                 ${isAdmin ? `<input type="checkbox" class="slot-select-checkbox" data-id="${slot.id}" style="margin-right: 6px;" onclick="event.stopPropagation()">` : ''}
                 <span>${slot.time}</span>
-                <span class="status-subtext" style="font-size: 0.85rem; font-weight: 500;">${statusText}</span>
+                <span class="status-subtext" style="font-size: 0.85rem; font-weight: 500; ${isBlocked ? 'color: #e53e3e; font-weight: bold;' : ''}">${statusText}</span>
                 ${isAdmin ? `
                     <div class="admin-actions">
                         <button class="edit-btn" title="編輯時段">✏️</button>
@@ -362,7 +383,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (!isAdmin) {
                     if (!isAvail) {
-                        alert("此時段已被預約！");
+                        alert(isBlocked ? "此時段全場不開放！" : "此時段已被預約！");
                         return;
                     }
                     currentBookingSlotId = slot.id;
@@ -387,14 +408,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     adminBookingList.innerHTML = `
                         <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; background: #f7fafc; border-radius: 8px;">
                             <div style="display: flex; align-items: center; gap: 8px;">
-                                <label style="font-size: 0.85rem; font-weight: bold; color: #4a5568; min-width: 60px;">預約姓名:</label>
+                                <label style="font-size: 0.85rem; font-weight: bold; color: #4a5568; min-width: 60px;">狀態/姓名:</label>
                                 <input type="text" id="admin-edit-student-name" value="${slot.studentName || ''}" style="flex: 1; padding: 6px 8px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 0.9rem;">
-                                <button type="button" id="save-student-name-btn" class="submit-btn" style="padding: 6px 12px; font-size: 0.85rem; width: auto;">更新姓名</button>
+                                <button type="button" id="save-student-name-btn" class="submit-btn" style="padding: 6px 12px; font-size: 0.85rem; width: auto;">更新</button>
                             </div>
                             <div style="display: flex; align-items: center; justify-content: space-between; border-top: 1px dashed #e2e8f0; padding-top: 8px;">
-                                <span style="font-size: 0.85rem; color: #718096;">確認無誤後可釋出時段：</span>
+                                <span style="font-size: 0.85rem; color: #718096;">確認無誤後可解除鎖定/釋出：</span>
                                 <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 0.85rem; color: #e53e3e; font-weight: bold;">
-                                    <input type="checkbox" id="confirm-clear-booking" style="width: 16px; height: 16px; cursor: pointer;"> 確認並消除 (釋出)
+                                    <input type="checkbox" id="confirm-clear-booking" style="width: 16px; height: 16px; cursor: pointer;"> 確認並解除鎖定 (釋出)
                                 </label>
                             </div>
                         </div>
@@ -407,16 +428,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         saveNameBtn.addEventListener('click', async () => {
                             const newName = nameInputEl.value.trim();
                             if (!newName) {
-                                alert("學生姓名不能為空白！");
+                                alert("內容不能為空白！");
                                 return;
                             }
                             try {
                                 await updateDoc(doc(db, "schedule", currentBookingSlotId), {
                                     studentName: newName
                                 });
-                                alert("學員姓名已成功更新！");
+                                alert("更新成功！");
                             } catch (err) {
-                                console.error("更新姓名失敗：", err);
+                                console.error("更新失敗：", err);
                                 alert("更新失敗，請檢查主控台。");
                             }
                         });
@@ -426,30 +447,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (clearCheckbox) {
                         clearCheckbox.addEventListener('change', async (ev) => {
                             if (ev.target.checked) {
-                                if (confirm(`確定要取消此預約並將時段釋出嗎？（將自動發送取消通知到 Discord）`)) {
+                                if (confirm(`確定要解除此時段的鎖定並重新釋出為可預約嗎？`)) {
                                     try {
-                                        const oldStudentName = slot.studentName || "未知學員";
-
                                         await updateDoc(doc(db, "schedule", currentBookingSlotId), {
                                             isAvailable: true,
                                             studentName: "",
                                             lessonType: ""
                                         });
 
-                                        const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1570461741995917352/gdHO5nE9_leWt1viBpDxAKE1lAzg67I7UiosB9uQ5d_T7g2588qYNc6F3_CNw7-CRyM2";
-                                        const cancelMessage = `❌ **【預約取消通知】**\n👤 **取消學員**：${oldStudentName}\n⏰ **日期：${dateStr} ｜ 時段：${slot.time}**\n*(時段已重新釋出為可預約)*`;
-                                        
-                                        await fetch(DISCORD_WEBHOOK_URL, {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ content: cancelMessage })
-                                        });
-
                                         adminBookingModal.classList.add('hidden');
-                                        alert("已成功取消預約並將時段釋出！");
+                                        alert("已成功解除鎖定並釋出時段！");
                                     } catch (err) {
-                                        console.error("取消預約或發送通知失敗：", err);
-                                        alert("時段已釋出，但 Discord 通知發送可能有些狀況。");
+                                        console.error("釋出時段失敗：", err);
+                                        alert("釋出失敗，請檢查主控台。");
                                     }
                                 } else {
                                     ev.target.checked = false;
@@ -465,7 +475,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (editBtn) {
                     editBtn.addEventListener('click', async (e) => {
                         e.stopPropagation();
-                        const newTime = prompt(`請輸入修改後的時段 (格式範例: 10:00 - 10:40)：`, slot.time);
+                        const newTime = prompt(`請輸入修改後的時段 (格式範例: 10:00 - 12:00)：`, slot.time);
                         if (newTime && newTime.trim() !== "" && newTime !== slot.time) {
                             try {
                                 await updateDoc(doc(db, "schedule", slot.id), { time: newTime.trim() });
@@ -542,6 +552,66 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
         }
+    }
+
+    // ==========================================
+    // 💡 設定指定時段不開放（完整區間不切分，如 10:00 - 12:00）
+    // ==========================================
+    if (setPartialBlockBtn) {
+        setPartialBlockBtn.addEventListener('click', async () => {
+            const dateVal = inputDate.value;
+            const startVal = startTimeInput.value;
+            const endVal = endTimeInput.value;
+
+            if (!dateVal || !startVal || !endVal) {
+                alert("請完整選擇日期與開始/結束時間！");
+                return;
+            }
+
+            const totalStartMin = timeToMinutes(startVal);
+            const totalEndMin = timeToMinutes(endVal);
+
+            if (totalStartMin >= totalEndMin) {
+                alert("結束時間必須大於開始時間！");
+                return;
+            }
+
+            // 💡 不再切分，直接組合成一個完整時段字串 (ex. 10:00 - 12:00)
+            const timeStr = `${startVal} - ${endVal}`;
+
+            if (!confirm(`確定要將 ${dateVal} 的【${timeStr}】設定為【全場不開放】（一整個時段不切分）嗎？`)) {
+                return;
+            }
+
+            try {
+                const scheduleRef = collection(db, "schedule");
+                const existingSlots = allScheduleData[dateVal] || [];
+                const matched = existingSlots.find(slot => slot.time === timeStr);
+
+                if (matched) {
+                    const docRef = doc(db, "schedule", matched.id);
+                    await updateDoc(docRef, {
+                        isAvailable: false,
+                        studentName: "不開放",
+                        lessonType: "不開放"
+                    });
+                } else {
+                    await addDoc(scheduleRef, {
+                        date: dateVal,
+                        time: timeStr,
+                        isAvailable: false,
+                        studentName: "不開放",
+                        lessonType: "不開放"
+                    });
+                }
+
+                alert(`區間鎖定成功！\n已將 ${timeStr} 設為全場不開放。`);
+
+            } catch (error) {
+                console.error("設定指定時段不開放失敗：", error);
+                alert("設定失敗，請檢查主控台。");
+            }
+        });
     }
 
     // ==========================================
@@ -645,7 +715,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 長時段自動切片批次新增
+    // 長時段自動切片批次新增（維持 40 分鐘切片供一般預約使用）
     if (addSlotForm) {
         addSlotForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -835,13 +905,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            if (confirm(`確定要將 ${dateVal} 設定為「全天包場」嗎？`)) {
+            if (confirm(`確定要將 ${dateVal} 設定為【全天包場】嗎？`)) {
                 try {
                     await addDoc(collection(db, "fullBookings"), {
                         date: dateVal,
                         createdAt: new Date()
                     });
-                    alert(`${dateVal} 已成功設定為全包場！`);
+                    alert(`${dateVal} 已成功設定為全天包場！`);
                 } catch (err) {
                     console.error("設定全包場失敗：", err);
                 }
