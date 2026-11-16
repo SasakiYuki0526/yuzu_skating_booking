@@ -70,7 +70,29 @@
                 <p class="batch-desc">將上方的「起始日期」直接設定為全天包場：</p>
                 <button type="button" id="set-full-booking-btn" class="batch-btn"
                     style="background-color: #e53e3e;">設定為全天包場</button>
+                <!-- 在 index.html 的 #admin-panel 內適當位置（例如全包場下方）加入以下區塊 -->
+                <hr class="panel-divider">
+
+                <h3>📊 薪資與約課報表匯出</h3>
+                <p class="batch-desc">選擇月份以計算薪資並匯出報表：</p>
+                <div class="form-group">
+                    <label>結算月份：</label>
+                    <input type="month" id="salary-month-input">
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 6px;">
+                    <button type="button" id="preview-salary-btn" class="batch-btn"
+                        style="background-color: #3182ce;">預覽明細</button>
+                    <button type="button" id="export-salary-csv-btn" class="batch-btn"
+                        style="background-color: #2b6cb0;">📥 手動匯出 CSV</button>
+                </div>
+
+                <!-- 薪資明細預覽容器 -->
+                <div id="salary-preview-container"
+                    style="margin-top: 10px; max-height: 200px; overflow-y: auto; font-size: 0.8rem; background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e0;">
+                    <span style="color: #a0aec0;">尚未載入資料，請選擇月份後點擊預覽</span>
+                </div>
             </div>
+
 
             <!-- FullCalendar 迷你月曆 -->
             <div id="mini-calendar"></div>
@@ -135,7 +157,7 @@
                     <label>學生姓名：</label>
                     <input type="text" id="booking-student-name" placeholder="請輸入學生姓名" required>
                     <!-- 在輸入姓名的 div 或 input 下方加入這段選單 -->
-                    
+
                 </div>
                 <div class="modal-actions">
                     <button type="button" id="modal-cancel-btn" class="submit-btn"
