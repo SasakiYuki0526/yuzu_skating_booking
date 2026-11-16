@@ -1,13 +1,13 @@
 // app.js - 完整最終整合版（含完整區間不開放時段、團體課、姓名隱私遮罩）
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { 
-    getFirestore, 
-    collection, 
-    addDoc, 
-    updateDoc, 
-    deleteDoc, 
-    doc, 
-    onSnapshot, 
+import {
+    getFirestore,
+    collection,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    doc,
+    onSnapshot,
     writeBatch,
     query,
     where,
@@ -220,18 +220,18 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         height: 'auto',
         selectable: true,
-        dateClick: function(info) {
+        dateClick: function (info) {
             selectedDate = info.dateStr;
             if (inputDate) inputDate.value = selectedDate;
             renderRightSlots(selectedDate);
         },
-        dayCellDidMount: function(info) {
+        dayCellDidMount: function (info) {
             const d = info.date;
             const year = d.getFullYear();
             const month = String(d.getMonth() + 1).padStart(2, '0');
             const day = String(d.getDate()).padStart(2, '0');
             const dateStr = `${year}-${month}-${day}`;
-            
+
             renderCellDots(info.el, dateStr);
         }
     });
@@ -282,7 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderRightSlots(dateStr) {
         const titleEl = document.getElementById('selected-date-title');
         const container = document.getElementById('slots-container');
-        
+
         if (titleEl) titleEl.textContent = `${dateStr} 時段狀況`;
         if (!container) return;
         container.innerHTML = '';
@@ -349,7 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const card = document.createElement('div');
             const isAvail = slot.isAvailable;
             card.className = `slot-card ${isAvail ? 'available' : 'booked'} clickable`;
-            
+
             const isBlocked = !isAvail && (slot.studentName === "不開放" || slot.lessonType === "不開放");
 
             let statusText = '可預約';
@@ -388,14 +388,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     currentBookingSlotId = slot.id;
                     modalSlotInfo.textContent = `日期：${dateStr} ｜ 時段：${slot.time}`;
-                    
+
                     if (bookingTypeSelect) {
                         bookingTypeSelect.selectedIndex = 0;
                         renderStudentNameInputs(bookingTypeSelect.value);
                     } else {
                         renderStudentNameInputs('1v1');
                     }
-                    
+
                     bookingModal.classList.remove('hidden');
                 } else {
                     if (isAvail) {
@@ -404,7 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     currentBookingSlotId = slot.id;
                     adminModalSlotInfo.textContent = `日期：${dateStr} ｜ 時段：${slot.time} ${slot.lessonType ? `(${slot.lessonType})` : ''}`;
-                    
+
                     adminBookingList.innerHTML = `
                         <div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; background: #f7fafc; border-radius: 8px;">
                             <div style="display: flex; align-items: center; gap: 8px;">
@@ -492,7 +492,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     delBtn.addEventListener('click', async (e) => {
                         e.stopPropagation();
                         if (confirm(`確定要刪除 ${slot.time} 時段嗎？`)) {
-                            try { await deleteDoc(doc(db, "schedule", slot.id)); } 
+                            try { await deleteDoc(doc(db, "schedule", slot.id)); }
                             catch (err) { console.error(err); }
                         }
                     });
@@ -626,7 +626,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (bookingForm) {
         bookingForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const allInputs = Array.from(document.querySelectorAll('.booking-student-name-item'));
             const requiredInputs = allInputs.filter(input => input.required);
             const isMissingRequired = requiredInputs.some(input => input.value.trim() === "");
@@ -636,7 +636,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 .filter(name => name !== "");
 
             const lessonType = bookingTypeSelect ? bookingTypeSelect.value : "1v1";
-            
+
             if (isMissingRequired || names.length === 0 || !currentBookingSlotId) {
                 alert("請完整填寫必填的學員姓名！");
                 return;
@@ -663,7 +663,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1570461741995917352/gdHO5nE9_leWt1viBpDxAKE1lAzg67I7UiosB9uQ5d_T7g2588qYNc6F3_CNw7-CRyM2";
                     const message = `🔔 **【新預約通知】**\n🏷️ **課程類型**：\`${lessonType}\`\n👤 **學員姓名**：${combinedStudentNames}\n⏰ **${targetSlotInfo}**`;
-                    
+
                     await fetch(DISCORD_WEBHOOK_URL, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -675,7 +675,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 bookingModal.classList.add('hidden');
                 alert(`預約成功！`);
-                
+
             } catch (err) {
                 console.error("預約寫入失敗：", err);
                 alert("預約失敗，請稍後再試。");
@@ -940,4 +940,138 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshAllDots();
         renderRightSlots(selectedDate);
     });
+    // ==========================================
+    // 💡 薪資與報表匯出功能模組
+    // ==========================================
+    const salaryRates = {
+        "1v1": 400,
+        "1v2": 600,
+        "1v3": 700,
+        "團體": 700,
+        "團體課": 700,
+        "團體體驗": 700,
+        "團體體驗課": 700
+    };
+
+    const salaryMonthInput = document.getElementById('salary-month-input');
+    const previewSalaryBtn = document.getElementById('preview-salary-btn');
+    const exportSalaryCsvBtn = document.getElementById('export-salary-csv-btn');
+    const salaryPreviewContainer = document.getElementById('salary-preview-container');
+
+    // 初始化預設月份為當前年月 (ex. 2026-11)
+    if (salaryMonthInput) {
+        salaryMonthInput.value = selectedDate.substring(0, 7);
+    }
+
+    // 取得指定月份已預約的資料
+    function getBookedDataForMonth(yearMonthStr) {
+        const results = [];
+        for (const dateStr in allScheduleData) {
+            if (dateStr.startsWith(yearMonthStr)) {
+                const slots = allScheduleData[dateStr];
+                slots.forEach(slot => {
+                    // 篩選出已預約且非不開放時段的紀錄
+                    if (!slot.isAvailable && slot.studentName && slot.studentName !== "不開放") {
+                        results.push({
+                            date: dateStr,
+                            time: slot.time,
+                            type: slot.lessonType || "1v1",
+                            name: slot.studentName
+                        });
+                    }
+                });
+            }
+        }
+        // 依日期時間排序
+        results.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+        return results;
+    }
+
+    // 預覽薪資與約課明細
+    if (previewSalaryBtn) {
+        previewSalaryBtn.addEventListener('click', () => {
+            const ym = salaryMonthInput.value;
+            if (!ym) {
+                alert("請先選擇結算月份！");
+                return;
+            }
+
+            const records = getBookedDataForMonth(ym);
+            if (records.length === 0) {
+                salaryPreviewContainer.innerHTML = `<p style="color: #718096; margin: 0;">${ym} 無任何已成交預約紀錄。</p>`;
+                return;
+            }
+
+            let total = 0;
+            let html = `<table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
+            <tr style="background:#edf2f7; text-align:left;">
+                <th style="padding:4px;">日期</th>
+                <th style="padding:4px;">時段</th>
+                <th style="padding:4px;">種類</th>
+                <th style="padding:4px;">學員</th>
+                <th style="padding:4px; text-align:right;">薪資</th>
+            </tr>`;
+
+            records.forEach(r => {
+                const rate = salaryRates[r.type] || 400;
+                total += rate;
+                html += `<tr style="border-bottom:1px solid #edf2f7;">
+                <td style="padding:4px;">${r.date}</td>
+                <td style="padding:4px;">${r.time}</td>
+                <td style="padding:4px;">${r.type}</td>
+                <td style="padding:4px;">${r.name}</td>
+                <td style="padding:4px; text-align:right;">$${rate}</td>
+            </tr>`;
+            });
+
+            html += `<tr style="font-weight:bold; background:#e2e8f0;">
+            <td colspan="4" style="padding:6px; text-align:right;">本月總薪資：</td>
+            <td style="padding:6px; text-align:right; color:#2b6cb0;">$${total}</td>
+        </tr></table>`;
+
+            salaryPreviewContainer.innerHTML = html;
+        });
+    }
+
+    // 手動匯出 CSV 報表
+    if (exportSalaryCsvBtn) {
+        exportSalaryCsvBtn.addEventListener('click', () => {
+            const ym = salaryMonthInput.value;
+            if (!ym) {
+                alert("請先選擇結算月份！");
+                return;
+            }
+
+            const records = getBookedDataForMonth(ym);
+            if (records.length === 0) {
+                alert(`${ym} 沒有可匯出的預約紀錄！`);
+                return;
+            }
+
+            // 加上 \uFEFF 避免 Excel 打開中文亂碼
+            let csvContent = "\uFEFF日期,時間,課程種類,學員名字,薪資\n";
+            let totalSalary = 0;
+
+            records.forEach(r => {
+                const rate = salaryRates[r.type] || 400;
+                totalSalary += rate;
+                // 處理名字若包含逗號時加雙引號
+                const safeName = `"${r.name.replace(/"/g, '""')}"`;
+                csvContent += `${r.date},${r.time},${r.type},${safeName},${rate}\n`;
+            });
+
+            csvContent += `,,,總計,${totalSalary}\n`;
+
+            // 觸發瀏覽器下載
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `教練薪資報表_${ym}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        });
+    }
+
 });
