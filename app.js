@@ -1,4 +1,4 @@
-// app.js - 完整最終整合版（含姓名隱私遮罩與動態多學生姓名欄位）
+// app.js - 完整最終整合版（支援團體課/團體體驗課、4格起跳可往上增加、姓名隱私遮罩）
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { 
     getFirestore, 
@@ -43,7 +43,7 @@ const todayObj = new Date();
 let selectedDate = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, '0')}-${String(todayObj.getDate()).padStart(2, '0')}`;
 
 /**
- * 💡 姓名隱私遮罩函式 (ex. 琳小清 -> 琳＊清，支援多人以頓號隔開)
+ * 姓名隱私遮罩函式 (ex. 琳小清 -> 琳＊清，支援多人以頓號隔開)
  */
 function maskName(nameStr) {
     if (!nameStr) return '';
@@ -89,7 +89,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminModalCloseBtn = document.getElementById('admin-modal-close-btn');
 
     // ==========================================
-    // 動態多學生姓名欄位初始化
+    // 💡 自動擴充下拉選單：加入「團體課」、「團體體驗課」
+    // ==========================================
+    if (bookingTypeSelect) {
+        const extraOptions = ['團體課', '團體體驗課'];
+        const existingValues = Array.from(bookingTypeSelect.options).map(opt => opt.value);
+        extraOptions.forEach(optText => {
+            if (!existingValues.includes(optText)) {
+                const opt = document.createElement('option');
+                opt.value = optText;
+                opt.textContent = optText;
+                bookingTypeSelect.appendChild(opt);
+            }
+        });
+    }
+
+    // ==========================================
+    // 💡 動態多學生姓名欄位初始化（含團體課4格起跳與往上增加按鈕）
     // ==========================================
     let studentInputsContainer = document.getElementById('dynamic-student-inputs');
     if (!studentInputsContainer && originalStudentNameInput) {
@@ -100,21 +116,62 @@ document.addEventListener('DOMContentLoaded', () => {
         originalStudentNameInput.remove();
     }
 
+    function createSingleNameInput(index, isRequired, totalCount) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'booking-student-name-item';
+        input.required = isRequired;
+        if (totalCount === 1) {
+            input.placeholder = '請輸入學員姓名';
+        } else if (isRequired) {
+            input.placeholder = `請輸入第 ${index} 位學員姓名 (必填)`;
+        } else {
+            input.placeholder = `請輸入第 ${index} 位學員姓名 (選填)`;
+        }
+        input.style.cssText = 'width: 100%; padding: 8px 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;';
+        return input;
+    }
+
     function renderStudentNameInputs(lessonTypeStr) {
         if (!studentInputsContainer) return;
         studentInputsContainer.innerHTML = '';
 
-        const match = String(lessonTypeStr).match(/1v(\d+)/i);
-        const count = match ? Math.max(1, parseInt(match[1], 10)) : 1;
+        const typeStr = String(lessonTypeStr);
+        const isGroupClass = typeStr.includes('團體');
 
-        for (let i = 1; i <= count; i++) {
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.className = 'booking-student-name-item';
-            input.required = true;
-            input.placeholder = count === 1 ? '請輸入學員姓名' : `請輸入第 ${i} 位學員姓名`;
-            input.style.cssText = 'width: 100%; padding: 8px 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 0.95rem; box-sizing: border-box;';
-            studentInputsContainer.appendChild(input);
+        if (isGroupClass) {
+            // 團體課 / 團體體驗課：基本 4 格，並附上「+ 增加學員欄位」按鈕可往上增加
+            const baseCount = 4;
+            const listWrapper = document.createElement('div');
+            listWrapper.id = 'group-student-list';
+            listWrapper.style.cssText = 'display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; padding-right: 2px;';
+
+            for (let i = 1; i <= baseCount; i++) {
+                listWrapper.appendChild(createSingleNameInput(i, true, baseCount));
+            }
+            studentInputsContainer.appendChild(listWrapper);
+
+            const addMoreBtn = document.createElement('button');
+            addMoreBtn.type = 'button';
+            addMoreBtn.textContent = '＋ 增加學員欄位';
+            addMoreBtn.style.cssText = 'align-self: flex-start; background: #edf2f7; color: #2d3748; border: 1px dashed #a0aec0; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; cursor: pointer; font-weight: 500; margin-top: 2px;';
+            addMoreBtn.addEventListener('click', () => {
+                const currentCount = listWrapper.querySelectorAll('.booking-student-name-item').length;
+                const nextIndex = currentCount + 1;
+                const newInput = createSingleNameInput(nextIndex, false, nextIndex);
+                listWrapper.appendChild(newInput);
+                newInput.focus();
+                listWrapper.scrollTop = listWrapper.scrollHeight;
+            });
+            studentInputsContainer.appendChild(addMoreBtn);
+        } else {
+            // 1v1, 1v2, 1v3... 依數字產生對應格數
+            const match = typeStr.match(/1v(\d+)/i);
+            const count = match ? Math.max(1, parseInt(match[1], 10)) : 1;
+
+            for (let i = 1; i <= count; i++) {
+                studentInputsContainer.appendChild(createSingleNameInput(i, true, count));
+            }
         }
     }
 
@@ -277,12 +334,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const isAvail = slot.isAvailable;
             card.className = `slot-card ${isAvail ? 'available' : 'booked'} clickable`;
             
-            // 💡 狀態文字顯示：一般使用者看到遮罩姓名 (ex. [1v1] 琳＊清)，管理者看到完整姓名
             const typeTag = slot.lessonType ? `[${slot.lessonType}] ` : '';
             let statusText = '可預約';
             if (!isAvail) {
                 if (isAdmin) {
-                    statusText = slot.studentName ? `已預約 (${slot.studentName})` : '已預約';
+                    statusText = slot.studentName ? `已預約 ${typeTag}(${slot.studentName})` : '已預約';
                 } else {
                     statusText = slot.studentName ? `${typeTag}${maskName(slot.studentName)}` : '已預約';
                 }
@@ -501,15 +557,18 @@ document.addEventListener('DOMContentLoaded', () => {
         bookingForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const nameInputs = document.querySelectorAll('.booking-student-name-item');
-            const names = Array.from(nameInputs)
+            const allInputs = Array.from(document.querySelectorAll('.booking-student-name-item'));
+            const requiredInputs = allInputs.filter(input => input.required);
+            const isMissingRequired = requiredInputs.some(input => input.value.trim() === "");
+
+            const names = allInputs
                 .map(input => input.value.trim())
                 .filter(name => name !== "");
 
             const lessonType = bookingTypeSelect ? bookingTypeSelect.value : "1v1";
             
-            if (names.length < nameInputs.length || !currentBookingSlotId) {
-                alert("請完整填寫所有學員姓名！");
+            if (isMissingRequired || names.length === 0 || !currentBookingSlotId) {
+                alert("請完整填寫必填的學員姓名！");
                 return;
             }
 
@@ -759,7 +818,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (totalAdded > 0) await batch.commit();
-                alert(`批次每週反覆新增完成！\n總共成功新增：${totalAdded} 個時段`);
+                alert(`每週反覆新增完成！\n總共成功新增：${totalAdded} 個時段`);
 
             } catch (error) {
                 console.error("每週批次新增失敗：", error);
