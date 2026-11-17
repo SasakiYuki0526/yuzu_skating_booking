@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>商品與交易紀錄管理系統</title>
+    <link rel="stylesheet" href="products.css">
+</head>
+
+<body>
+
+    <div class="products-layout">
+        <!-- 頂部導覽列 -->
+        <header class="products-header">
+            <h2>📦 商品與交易紀錄管理</h2>
+            <button id="back-to-admin-btn" class="back-btn">⬅️ 返回預約管理頁面</button>
+        </header>
+
+        <div class="main-grid">
+            <!-- 左側：商品管理區 -->
+            <section class="card">
+                <h3>🛍️ 商品管理</h3>
+                <form id="add-product-form" class="form-stack">
+                    <div class="form-group">
+                        <label>商品名稱：</label>
+                        <input type="text" id="prod-name" placeholder="例如：專業滑冰手套" required>
+                    </div>
+                    <div class="form-group">
+                        <label>選擇商品圖片 (選填)：</label>
+                        <input type="file" id="prod-image-file" accept="image/*" style="padding: 6px;">
+                    </div>
+                    <div class="form-group">
+                        <label>教練價格 (NT$)：</label>
+                        <input type="number" id="prod-coach-price" placeholder="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label>售價 (NT$)：</label>
+                        <input type="number" id="prod-sell-price" placeholder="0" required>
+                    </div>
+                    <button type="submit" class="submit-btn">新增商品</button>
+                </form>
+
+                <hr class="panel-divider">
+
+                <h4>現有商品列表</h4>
+                <div id="product-list-container" class="product-grid">
+                    <!-- 動態載入商品 -->
+                </div>
+            </section>
+
+            <!-- 右側：交易紀錄管理區 -->
+            <section class="card">
+                <h3>💰 交易紀錄管理</h3>
+                <form id="add-transaction-form" class="form-stack">
+                    <div class="form-group">
+                        <label>選擇商品：</label>
+                        <select id="trans-product-select" required>
+                            <option value="">-- 請先選擇商品 --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>購買人姓名：</label>
+                        <input type="text" id="trans-buyer-name" placeholder="例如：王小明" required>
+                    </div>
+                    <button type="submit" class="submit-btn" style="background-color: #3182ce;">新增交易紀錄</button>
+                </form>
+
+                <hr class="panel-divider">
+
+                <h4>交易紀錄明細</h4>
+                <div class="table-responsive">
+                    <table class="transaction-table">
+                        <thead>
+                            <tr>
+                                <th>日期</th>
+                                <th>圖片</th>
+                                <th>商品名稱</th>
+                                <th>購買人</th>
+                                <th>售價</th>
+                                <th>教練價格</th>
+                                <th>已收款</th>
+                                <th>已付廠商</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transaction-table-body">
+                            <!-- 動態載入交易紀錄 -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- 載入 JS 邏輯 -->
+    <script type="module" src="products.js"></script>
+</body>
+
+</html>
