@@ -1,17 +1,16 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { 
-    getFirestore, 
-    collection, 
-    addDoc, 
-    deleteDoc, 
-    doc, 
-    onSnapshot, 
+import {
+    getFirestore,
+    collection,
+    addDoc,
+    deleteDoc,
+    doc,
+    onSnapshot,
     updateDoc,
     query,
     orderBy
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// 1. Firebase 初始化
 const firebaseConfig = {
     apiKey: "AIzaSyBCqdRd1sbSY7o44d_PhvYQUfGZVZg9Tkw",
     authDomain: "skating-class.firebaseapp.com",
@@ -28,15 +27,25 @@ const db = getFirestore(app);
 document.addEventListener('DOMContentLoaded', () => {
     const backBtn = document.getElementById('back-to-admin-btn');
     const addProductForm = document.getElementById('add-product-form');
+    const prodFormTitle = document.getElementById('prod-form-title');
+    const prodSubmitBtn = document.getElementById('prod-submit-btn');
+    const prodCancelEditBtn = document.getElementById('prod-cancel-edit-btn');
+    const editProdIdInput = document.getElementById('edit-prod-id');
     const productListContainer = document.getElementById('product-list-container');
-    const multiProductList = document.getElementById('trans-multi-product-list');
+
+    const transProductSelect = document.getElementById('trans-product-select');
+    const transItemQtyInput = document.getElementById('trans-item-qty');
+    const addTransItemBtn = document.getElementById('add-trans-item-btn');
+    const currentTransItemsBox = document.getElementById('current-trans-items');
     const addTransactionForm = document.getElementById('add-transaction-form');
+
     const transactionTableBody = document.getElementById('transaction-table-body');
     const transactionTableFoot = document.getElementById('transaction-table-foot');
     const calcSellTotalEl = document.getElementById('calc-sell-total');
     const calcCoachTotalEl = document.getElementById('calc-coach-total');
 
     let productsMap = {};
+    let currentSelectedItems = []; // 暫存本次交易加入的商品陣列 [{productId, name, image, sellPrice, coachPrice, quantity}]
 
     if (backBtn) {
         backBtn.addEventListener('click', () => {
@@ -44,50 +53,114 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 即時計算目前勾選的商品總金額
-    function updateLiveCalculation() {
+    // 更新本次交易的試算金額與清單畫面
+    function renderCurrentTransactionItems() {
+        if (currentSelectedItems.length === 0) {
+            currentTransItemsBox.innerHTML = `<span style="color: #a0aec0; font-size: 0.85rem; padding: 4px;">尚未加入商品</span>`;
+            if (calcSellTotalEl) calcSellTotalEl.textContent = `$0`;
+            if (calcCoachTotalEl) calcCoachTotalEl.textContent = `$0`;
+            return;
+        }
+
         let totalSell = 0;
         let totalCoach = 0;
+        let html = '';
 
-        document.querySelectorAll('.prod-select-chk:checked').forEach(chk => {
-            const pId = chk.getAttribute('data-id');
-            const qtyInput = document.querySelector(`.qty-input[data-id="${pId}"]`);
-            const qty = qtyInput ? Math.max(1, parseInt(qtyInput.value, 10) || 1) : 1;
-            const prod = productsMap[pId];
+        currentSelectedItems.forEach((item, index) => {
+            totalSell += item.sellPrice * item.quantity;
+            totalCoach += item.coachPrice * item.quantity;
 
-            if (prod) {
-                totalSell += prod.sellPrice * qty;
-                totalCoach += prod.coachPrice * qty;
-            }
+            html += `
+                <div class="current-item-row">
+                    <span>${item.name} (售$${item.sellPrice} / 教$${item.coachPrice}) × <strong>${item.quantity}</strong></span>
+                    <button type="button" class="remove-item-btn" data-index="${index}" title="移除">×</button>
+                </div>
+            `;
         });
 
+        currentTransItemsBox.innerHTML = html;
         if (calcSellTotalEl) calcSellTotalEl.textContent = `$${totalSell.toLocaleString()}`;
         if (calcCoachTotalEl) calcCoachTotalEl.textContent = `$${totalCoach.toLocaleString()}`;
+
+        // 綁定移除按鈕
+        document.querySelectorAll('.remove-item-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const idx = parseInt(e.target.getAttribute('data-index'), 10);
+                currentSelectedItems.splice(idx, 1);
+                renderCurrentTransactionItems();
+            });
+        });
     }
 
-    // 1. 新增商品（圖片選填）
+    // 點擊「加入」按鈕將下拉選單商品加入本次交易
+    if (addTransItemBtn) {
+        addTransItemBtn.addEventListener('click', () => {
+            const pId = transProductSelect.value;
+            const qty = parseInt(transItemQtyInput.value, 10) || 1;
+
+            if (!pId || !productsMap[pId]) {
+                alert("請先從下拉選單選擇商品！");
+                return;
+            }
+
+            const prod = productsMap[pId];
+
+            // 檢查是否已在清單中，若有則累加數量
+            const existing = currentSelectedItems.find(i => i.productId === pId);
+            if (existing) {
+                existing.quantity += qty;
+            } else {
+                currentSelectedItems.push({
+                    productId: pId,
+                    name: prod.name,
+                    image: prod.imageUrl || "",
+                    sellPrice: prod.sellPrice,
+                    coachPrice: prod.coachPrice,
+                    quantity: qty
+                });
+            }
+
+            transItemQtyInput.value = 1;
+            renderCurrentTransactionItems();
+        });
+    }
+
+    // 1. 新增或更新商品
     if (addProductForm) {
         addProductForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const editId = editProdIdInput.value;
             const name = document.getElementById('prod-name').value.trim();
+            const note = document.getElementById('prod-note').value.trim(); // 💡 取得商品備註
             const fileInput = document.getElementById('prod-image-file');
             const coachPrice = Number(document.getElementById('prod-coach-price').value);
             const sellPrice = Number(document.getElementById('prod-sell-price').value);
 
-            async function saveProductToFirestore(imageUrl) {
+            async function saveProduct(imageUrl) {
                 try {
-                    await addDoc(collection(db, "products"), {
-                        name,
-                        imageUrl: imageUrl || "",
-                        coachPrice,
-                        sellPrice,
-                        createdAt: new Date().toISOString()
-                    });
-                    alert("商品新增成功！");
-                    addProductForm.reset();
+                    if (editId) {
+                        // 更新商品（包含備註）
+                        const updateData = { name, note, coachPrice, sellPrice };
+                        if (imageUrl !== null) updateData.imageUrl = imageUrl;
+                        await updateDoc(doc(db, "products", editId), updateData);
+                        alert("商品修改成功！");
+                        resetProductForm();
+                    } else {
+                        // 新增商品（包含備註）
+                        await addDoc(collection(db, "products"), {
+                            name,
+                            note,
+                            imageUrl: imageUrl || "",
+                            coachPrice,
+                            sellPrice,
+                            createdAt: new Date().toISOString()
+                        });
+                        alert("商品新增成功！");
+                        addProductForm.reset();
+                    }
                 } catch (err) {
-                    console.error("新增商品失敗：", err);
-                    alert("新增失敗，請檢查主控台。");
+                    console.error("儲存商品失敗：", err);
+                    alert("操作失敗，請檢查主控台。");
                 }
             }
 
@@ -98,50 +171,41 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
                 const reader = new FileReader();
-                reader.onload = function(event) {
-                    saveProductToFirestore(event.target.result);
+                reader.onload = function (event) {
+                    saveProduct(event.target.result);
                 };
                 reader.readAsDataURL(file);
             } else {
-                saveProductToFirestore("");
+                saveProduct(editId ? null : "");
             }
         });
     }
 
-    // 2. 新增交易紀錄（支援多項商品）
+    // 2. 送出交易紀錄（加入 note 欄位）
     if (addTransactionForm) {
         addTransactionForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const buyerName = document.getElementById('trans-buyer-name').value.trim();
-            const checkedBoxes = document.querySelectorAll('.prod-select-chk:checked');
+            const note = document.getElementById('trans-note').value.trim(); // 取得備註
 
-            if (checkedBoxes.length === 0) {
-                alert("請至少勾選一項商品！");
+            if (currentSelectedItems.length === 0) {
+                alert("請至少加入一項商品到本次交易清單！");
                 return;
             }
 
-            const items = [];
             let totalSellPrice = 0;
             let totalCoachPrice = 0;
-
-            checkedBoxes.forEach(chk => {
-                const pId = chk.getAttribute('data-id');
-                const qtyInput = document.querySelector(`.qty-input[data-id="${pId}"]`);
-                const qty = qtyInput ? Math.max(1, parseInt(qtyInput.value, 10) || 1) : 1;
-                const prod = productsMap[pId];
-
-                if (prod) {
-                    items.push({
-                        productId: pId,
-                        productName: prod.name,
-                        productImage: prod.imageUrl || "",
-                        sellPrice: prod.sellPrice,
-                        coachPrice: prod.coachPrice,
-                        quantity: qty
-                    });
-                    totalSellPrice += prod.sellPrice * qty;
-                    totalCoachPrice += prod.coachPrice * qty;
-                }
+            const items = currentSelectedItems.map(item => {
+                totalSellPrice += item.sellPrice * item.quantity;
+                totalCoachPrice += item.coachPrice * item.quantity;
+                return {
+                    productId: item.productId,
+                    productName: item.name,
+                    productImage: item.image,
+                    sellPrice: item.sellPrice,
+                    coachPrice: item.coachPrice,
+                    quantity: item.quantity
+                };
             });
 
             const todayStr = new Date().toISOString().split('T')[0];
@@ -150,20 +214,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 await addDoc(collection(db, "transactions"), {
                     date: todayStr,
                     buyerName: buyerName,
-                    items: items,                   // 儲存多項商品陣列
-                    totalSellPrice: totalSellPrice, // 該筆交易總售價
-                    totalCoachPrice: totalCoachPrice, // 該筆交易總教練價
+                    items: items,
+                    totalSellPrice: totalSellPrice,
+                    totalCoachPrice: totalCoachPrice,
+                    note: note, // 儲存備註
                     isPaid: false,
                     isPaidSupplier: false
                 });
                 alert("交易紀錄新增成功！");
                 addTransactionForm.reset();
-                // 重置數量框與試算金額
-                document.querySelectorAll('.qty-input').forEach(inp => {
-                    inp.value = 1;
-                    inp.disabled = true;
-                });
-                updateLiveCalculation();
+                currentSelectedItems = [];
+                renderCurrentTransactionItems();
             } catch (err) {
                 console.error("新增交易紀錄失敗：", err);
                 alert("新增交易失敗。");
@@ -171,15 +232,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 3. 即時監聽商品資料
+    // 3. 即時監聽商品資料（條列式清單與下拉選單更新）
     onSnapshot(query(collection(db, "products"), orderBy("createdAt", "desc")), (snapshot) => {
         productsMap = {};
         productListContainer.innerHTML = '';
-        multiProductList.innerHTML = '';
+        transProductSelect.innerHTML = '<option value="">-- 請選擇商品 --</option>';
 
         if (snapshot.empty) {
-            productListContainer.innerHTML = `<p style="font-size:0.8rem; color:#718096; grid-column:1/-1;">尚無商品</p>`;
-            multiProductList.innerHTML = `<p style="font-size:0.8rem; color:#718096; margin:4px;">請先於左側新增商品</p>`;
+            productListContainer.innerHTML = `<p style="font-size:0.85rem; color:#718096; padding:4px;">尚無商品紀錄</p>`;
             return;
         }
 
@@ -188,52 +248,51 @@ document.addEventListener('DOMContentLoaded', () => {
             const pId = docSnap.id;
             productsMap[pId] = p;
 
-            // 渲染左側商品小卡
-            const card = document.createElement('div');
-            card.className = 'product-mini-card';
-            card.innerHTML = `
-                <img src="${p.imageUrl || ''}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/60?text=No+Img'">
-                <h5>${p.name}</h5>
-                <p>售:$${p.sellPrice} | 教:$${p.coachPrice}</p>
-                <button class="del-prod-btn" data-id="${pId}">刪除</button>
-            `;
-            productListContainer.appendChild(card);
-
-            // 渲染右側多選商品項目
-            const itemRow = document.createElement('div');
-            itemRow.className = 'multi-prod-item';
-            itemRow.innerHTML = `
-                <label class="multi-prod-left">
-                    <input type="checkbox" class="prod-select-chk" data-id="${pId}">
-                    <img src="${p.imageUrl || ''}" alt="" onerror="this.src='https://via.placeholder.com/32?text=Img'">
-                    <span><strong>${p.name}</strong> (售$${p.sellPrice} / 教$${p.coachPrice})</span>
-                </label>
-                <div>
-                    <span style="font-size:0.75rem; color:#718096;">數量：</span>
-                    <input type="number" class="qty-input" data-id="${pId}" value="1" min="1" disabled>
+            // 渲染左側條列式商品
+            const rowItem = document.createElement('div');
+            rowItem.className = 'product-row-item';
+            rowItem.innerHTML = `
+                <div class="product-row-info">
+                    <img src="${p.imageUrl || ''}" alt="" onerror="this.src='https://via.placeholder.com/45?text=Img'">
+                    <div class="product-row-details">
+                        <h5>${p.name}</h5>
+                        <p>售價: $${p.sellPrice} ｜ 教練價: $${p.coachPrice}</p>
+                    </div>
+                </div>
+                <div class="product-row-actions">
+                    <button class="action-btn edit-prod-row-btn" data-id="${pId}">編輯</button>
+                    <button class="action-btn del-prod-row-btn" data-id="${pId}">刪除</button>
                 </div>
             `;
-            multiProductList.appendChild(itemRow);
+            productListContainer.appendChild(rowItem);
+
+            // 渲染交易表單下拉選單
+            const opt = document.createElement('option');
+            opt.value = pId;
+            opt.textContent = `${p.name} (售價: $${p.sellPrice})`;
+            transProductSelect.appendChild(opt);
         });
 
-        // 綁定勾選與數量連動試算
-        document.querySelectorAll('.prod-select-chk').forEach(chk => {
-            chk.addEventListener('change', (e) => {
-                const pId = e.target.getAttribute('data-id');
-                const qtyInput = document.querySelector(`.qty-input[data-id="${pId}"]`);
-                if (qtyInput) {
-                    qtyInput.disabled = !e.target.checked;
+        // 綁定編輯商品按鈕
+        document.querySelectorAll('.edit-prod-row-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = e.target.getAttribute('data-id');
+                const p = productsMap[id];
+                if (p) {
+                    editProdIdInput.value = id;
+                    document.getElementById('prod-name').value = p.name;
+                    document.getElementById('prod-coach-price').value = p.coachPrice;
+                    document.getElementById('prod-sell-price').value = p.sellPrice;
+                    prodFormTitle.textContent = "✏️ 編輯商品";
+                    prodSubmitBtn.textContent = "儲存修改";
+                    prodCancelEditBtn.classList.remove('hidden');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
-                updateLiveCalculation();
             });
         });
 
-        document.querySelectorAll('.qty-input').forEach(inp => {
-            inp.addEventListener('input', updateLiveCalculation);
-        });
-
-        // 綁定刪除商品
-        document.querySelectorAll('.del-prod-btn').forEach(btn => {
+        // 綁定刪除商品按鈕
+        document.querySelectorAll('.del-prod-row-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const id = e.target.getAttribute('data-id');
                 if (confirm("確定要刪除這個商品嗎？")) {
@@ -247,13 +306,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // 4. 即時監聽交易紀錄資料（顯示詳細多商品與總加總）
+    // 4. 即時監聽交易紀錄明細（加入備註欄位與即時更新）
     onSnapshot(query(collection(db, "transactions"), orderBy("date", "desc")), (snapshot) => {
         transactionTableBody.innerHTML = '';
         transactionTableFoot.innerHTML = '';
 
         if (snapshot.empty) {
-            transactionTableBody.innerHTML = `<tr><td colspan="8" style="color: #718096;">尚無交易紀錄</td></tr>`;
+            transactionTableBody.innerHTML = `<tr><td colspan="9" style="color: #718096;">尚無交易紀錄</td></tr>`;
             return;
         }
 
@@ -264,7 +323,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const t = docSnap.data();
             const tId = docSnap.id;
 
-            // 相容舊版單一商品格式與新版多項商品格式
             const itemsList = t.items || [{
                 productName: t.productName,
                 productImage: t.productImage,
@@ -279,63 +337,74 @@ document.addEventListener('DOMContentLoaded', () => {
             grandTotalSell += rowSellTotal;
             grandTotalCoach += rowCoachTotal;
 
-            // 組合多項商品詳細 HTML
             const itemsHtml = itemsList.map(item => `
-                <div class="trans-item-row">
-                    <img src="${item.productImage || ''}" alt="" onerror="this.src='https://via.placeholder.com/32?text=Img'">
-                    <span>${item.productName} × ${item.quantity} <span style="color:#718096;">(售$${item.sellPrice}/教$${item.coachPrice})</span></span>
-                </div>
-            `).join('');
+            <div class="trans-item-row">
+                <img src="${item.productImage || ''}" alt="" onerror="this.src='https://via.placeholder.com/32?text=Img'">
+                <span>${item.productName} × ${item.quantity} <span style="color:#718096;">(售$${item.sellPrice}/教$${item.coachPrice})</span></span>
+            </div>
+        `).join('');
 
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td>${t.date}</td>
-                <td style="font-weight: 500;">${t.buyerName}</td>
-                <td><div class="trans-items-list">${itemsHtml}</div></td>
-                <td style="font-weight: 600; color: #2b6cb0;">$${rowSellTotal.toLocaleString()}</td>
-                <td style="font-weight: 600; color: #38a169;">$${rowCoachTotal.toLocaleString()}</td>
-                <td><input type="checkbox" class="table-checkbox toggle-paid" data-id="${tId}" ${t.isPaid ? 'checked' : ''}></td>
-                <td><input type="checkbox" class="table-checkbox toggle-supplier" data-id="${tId}" ${t.isPaidSupplier ? 'checked' : ''}></td>
-                <td><button class="del-prod-btn del-trans-btn" data-id="${tId}">刪除</button></td>
-            `;
+            <td>${t.date}</td>
+            <td style="font-weight: 500;">${t.buyerName}</td>
+            <td><div class="trans-items-list">${itemsHtml}</div></td>
+            <td style="font-weight: 600; color: #2b6cb0;">$${rowSellTotal.toLocaleString()}</td>
+            <td style="font-weight: 600; color: #38a169;">$${rowCoachTotal.toLocaleString()}</td>
+            <td><input type="text" class="table-note-input update-note" data-id="${tId}" value="${t.note || ''}" placeholder="點擊填寫備註..."></td>
+            <td><input type="checkbox" class="table-checkbox toggle-paid" data-id="${tId}" ${t.isPaid ? 'checked' : ''}></td>
+            <td><input type="checkbox" class="table-checkbox toggle-supplier" data-id="${tId}" ${t.isPaidSupplier ? 'checked' : ''}></td>
+            <td><button class="action-btn del-prod-row-btn del-trans-btn" data-id="${tId}">刪除</button></td>
+        `;
             transactionTableBody.appendChild(row);
         });
 
-        // 渲染最下方所有交易總加總列
         transactionTableFoot.innerHTML = `
-            <tr class="total-summary-row">
-                <td colspan="3" style="text-align: right;">全部交易總計：</td>
-                <td style="color: #2b6cb0;">$${grandTotalSell.toLocaleString()}</td>
-                <td style="color: #38a169;">$${grandTotalCoach.toLocaleString()}</td>
-                <td colspan="3"></td>
-            </tr>
-        `;
+        <tr class="total-summary-row">
+            <td colspan="3" style="text-align: right;">全部交易總計：</td>
+            <td style="color: #2b6cb0;">$${grandTotalSell.toLocaleString()}</td>
+            <td style="color: #38a169;">$${grandTotalCoach.toLocaleString()}</td>
+            <td colspan="4"></td>
+        </tr>
+    `;
 
-        // 綁定收款勾選
+        // 綁定備註即時修改儲存（當使用者離開輸入框時自動更新到 Firebase）
+        document.querySelectorAll('.update-note').forEach(input => {
+            input.addEventListener('change', async (e) => {
+                const id = e.target.getAttribute('data-id');
+                const newNote = e.target.value.trim();
+                try {
+                    await updateDoc(doc(db, "transactions", id), { note: newNote });
+                } catch (err) {
+                    console.error("更新備註失敗：", err);
+                }
+            });
+        });
+
+        // 綁定收款與付廠商勾選狀態更新
         document.querySelectorAll('.toggle-paid').forEach(chk => {
             chk.addEventListener('change', async (e) => {
                 const id = e.target.getAttribute('data-id');
                 try {
                     await updateDoc(doc(db, "transactions", id), { isPaid: e.target.checked });
                 } catch (err) {
-                    console.error("更新收款狀態失敗：", err);
+                    console.error("更新收款失敗：", err);
                 }
             });
         });
 
-        // 綁定付廠商勾選
         document.querySelectorAll('.toggle-supplier').forEach(chk => {
             chk.addEventListener('change', async (e) => {
                 const id = e.target.getAttribute('data-id');
                 try {
                     await updateDoc(doc(db, "transactions", id), { isPaidSupplier: e.target.checked });
                 } catch (err) {
-                    console.error("更新付廠商狀態失敗：", err);
+                    console.error("更新付廠商失敗：", err);
                 }
             });
         });
 
-        // 綁定刪除交易
+        // 刪除交易紀錄
         document.querySelectorAll('.del-trans-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const id = e.target.getAttribute('data-id');
@@ -343,7 +412,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     try {
                         await deleteDoc(doc(db, "transactions", id));
                     } catch (err) {
-                        console.error("刪除交易失敗：", err);
+                        console.error("刪除失敗：", err);
                     }
                 }
             });
