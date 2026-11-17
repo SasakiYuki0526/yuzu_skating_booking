@@ -528,3 +528,40 @@ body.admin-mode .slot-card.booked .admin-actions {
     border-top: 1px dashed rgba(0, 0, 0, 0.1);
     padding-top: 4px;
 }
+
+/* ==================================================
+   右下角浮動按鈕樣式 (Floating Action Button)
+   ================================================== */
+   .floating-btn {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+    background-color: #ffffff; /* 藍色系，可自行更換 */
+    color: white;
+    border: none;
+    border-radius: 50%;
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    z-index: 999; /* 確保浮在最上層，不會被其他區塊蓋住 */
+    transition: transform 0.2s, background-color 0.2s;
+}
+
+.floating-btn:hover {
+    background-color: #62a7f0;
+    transform: scale(1.08); /* 滑鼠懸停時微幅放大 */
+}
+
+.floating-btn:active {
+    transform: scale(0.95);
+}
+
+/* 通用隱藏樣式 */
+.hidden {
+    display: none !important;
+}
