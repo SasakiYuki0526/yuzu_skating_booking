@@ -20,11 +20,17 @@
         <div class="main-grid">
             <!-- 左側：商品管理區 -->
             <section class="card">
-                <h3>🛍️ 商品管理</h3>
+                <h3 id="prod-form-title">🛍️ 新增商品</h3>
                 <form id="add-product-form" class="form-stack">
+                    <input type="hidden" id="edit-prod-id" value="">
                     <div class="form-group">
                         <label>商品名稱：</label>
                         <input type="text" id="prod-name" placeholder="例如：專業滑冰手套" required>
+                    </div>
+                    <!-- 💡 新增：商品備註輸入框 -->
+                    <div class="form-group">
+                        <label>商品備註 (選填)：</label>
+                        <input type="text" id="prod-note" placeholder="例如：尺寸 S/M/L、預購約 7 天">
                     </div>
                     <div class="form-group">
                         <label>選擇商品圖片 (選填)：</label>
@@ -38,14 +44,17 @@
                         <label>售價 (NT$)：</label>
                         <input type="number" id="prod-sell-price" placeholder="0" required>
                     </div>
-                    <button type="submit" class="submit-btn">新增商品</button>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="submit" id="prod-submit-btn" class="submit-btn" style="flex: 1;">新增商品</button>
+                        <button type="button" id="prod-cancel-edit-btn" class="submit-btn hidden" style="background: #cbd5e0; color: #2d3748; flex: 1;">取消編輯</button>
+                    </div>
                 </form>
 
                 <hr class="panel-divider">
 
                 <h4>現有商品列表</h4>
-                <div id="product-list-container" class="product-grid">
-                    <!-- 動態載入商品 -->
+                <div id="product-list-container" class="product-list-vertical">
+                    <!-- 動態載入條列式商品 -->
                 </div>
             </section>
 
@@ -59,10 +68,30 @@
                     </div>
 
                     <div class="form-group">
-                        <label>選擇商品（可複選並調整數量）：</label>
-                        <div id="trans-multi-product-list" class="multi-product-selector">
-                            <!-- 動態載入可勾選的商品與數量框 -->
+                        <label>選擇商品與數量：</label>
+                        <div style="display: flex; gap: 8px;">
+                            <select id="trans-product-select" style="flex: 2;">
+                                <option value="">-- 請選擇商品 --</option>
+                            </select>
+                            <input type="number" id="trans-item-qty" value="1" min="1" style="width: 70px;"
+                                placeholder="數量">
+                            <button type="button" id="add-trans-item-btn" class="submit-btn"
+                                style="width: auto; margin-top: 0; background-color: #3182ce;">加入</button>
                         </div>
+                    </div>
+
+                    <!-- 本次交易已選商品清單 -->
+                    <div class="form-group">
+                        <label>本次交易清單：</label>
+                        <div id="current-trans-items" class="current-items-box">
+                            <span style="color: #a0aec0; font-size: 0.85rem; padding: 4px;">尚未加入商品</span>
+                        </div>
+                    </div>
+
+                    <!-- 💡 新增：備註輸入框 -->
+                    <div class="form-group">
+                        <label>備註 (選填)：</label>
+                        <input type="text" id="trans-note" placeholder="例如：已匯款、7-11店到店等">
                     </div>
 
                     <!-- 即時試算本次交易總金額 -->
@@ -72,7 +101,7 @@
                                 id="calc-coach-total" style="color: #38a169;">$0</strong></span>
                     </div>
 
-                    <button type="submit" class="submit-btn" style="background-color: #3182ce;">新增交易紀錄</button>
+                    <button type="submit" class="submit-btn" style="background-color: #38a169;">送出交易紀錄</button>
                 </form>
 
                 <hr class="panel-divider">
@@ -87,6 +116,7 @@
                                 <th>購買商品明細</th>
                                 <th>總售價</th>
                                 <th>總教練價</th>
+                                <th>備註</th> <!-- 💡 新增欄位 -->
                                 <th>已收款</th>
                                 <th>已付廠商</th>
                                 <th>操作</th>
@@ -104,7 +134,6 @@
         </div>
     </div>
 
-    <!-- 載入 JS 邏輯 -->
     <script type="module" src="products.js"></script>
 </body>
 
