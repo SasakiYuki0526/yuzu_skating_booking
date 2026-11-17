@@ -690,30 +690,40 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 管理者面板登入切換
-    if (adminToggleBtn) {
-        adminToggleBtn.addEventListener('click', () => {
-            if (!isAdmin) {
-                const pwd = prompt("請輸入管理者密碼：");
-                if (pwd === "101010") {
-                    isAdmin = true;
-                    adminToggleBtn.textContent = "🔓 管理者已登入";
-                    adminToggleBtn.classList.add('unlocked');
-                    adminPanel.classList.remove('hidden');
-                    document.body.classList.add('admin-mode');
-                    renderRightSlots(selectedDate);
-                } else if (pwd !== null) {
-                    alert("密碼錯誤！");
-                }
-            } else {
-                isAdmin = false;
-                adminToggleBtn.textContent = "🔒 管理員登入";
-                adminToggleBtn.classList.remove('unlocked');
-                adminPanel.classList.add('hidden');
-                document.body.classList.remove('admin-mode');
+if (adminToggleBtn) {
+    adminToggleBtn.addEventListener('click', () => {
+        const floatingProductsBtn = document.getElementById('floating-products-btn');
+
+        if (!isAdmin) {
+            const pwd = prompt("請輸入管理者密碼：");
+            if (pwd === "101010") {
+                isAdmin = true;
+                adminToggleBtn.textContent = "🔓 管理者已登入";
+                adminToggleBtn.classList.add('unlocked');
+                adminPanel.classList.remove('hidden');
+                document.body.classList.add('admin-mode');
+                
+                // 💡 登入成功時，顯示右下角浮動按鈕
+                if (floatingProductsBtn) floatingProductsBtn.classList.remove('hidden');
+
                 renderRightSlots(selectedDate);
+            } else if (pwd !== null) {
+                alert("密碼錯誤！");
             }
-        });
-    }
+        } else {
+            isAdmin = false;
+            adminToggleBtn.textContent = "🔒 管理員登入";
+            adminToggleBtn.classList.remove('unlocked');
+            adminPanel.classList.add('hidden');
+            document.body.classList.remove('admin-mode');
+
+            // 💡 登出時，隱藏右下角浮動按鈕
+            if (floatingProductsBtn) floatingProductsBtn.classList.add('hidden');
+
+            renderRightSlots(selectedDate);
+        }
+    });
+}
 
     // 長時段自動切片批次新增（維持 40 分鐘切片供一般預約使用）
     if (addSlotForm) {
@@ -1071,6 +1081,13 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
+        });
+    }
+    // 跳轉至商品與交易管理頁面
+    const floatingProductsBtn = document.getElementById('floating-products-btn');
+    if (floatingProductsBtn) {
+        floatingProductsBtn.addEventListener('click', () => {
+            window.location.href = 'products.html';
         });
     }
 
