@@ -54,15 +54,24 @@
                 <h3>💰 交易紀錄管理</h3>
                 <form id="add-transaction-form" class="form-stack">
                     <div class="form-group">
-                        <label>選擇商品：</label>
-                        <select id="trans-product-select" required>
-                            <option value="">-- 請先選擇商品 --</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
                         <label>購買人姓名：</label>
                         <input type="text" id="trans-buyer-name" placeholder="例如：王小明" required>
                     </div>
+
+                    <div class="form-group">
+                        <label>選擇商品（可複選並調整數量）：</label>
+                        <div id="trans-multi-product-list" class="multi-product-selector">
+                            <!-- 動態載入可勾選的商品與數量框 -->
+                        </div>
+                    </div>
+
+                    <!-- 即時試算本次交易總金額 -->
+                    <div class="live-calc-box">
+                        <span>本次交易合計：</span>
+                        <span>總售價 <strong id="calc-sell-total" style="color: #2b6cb0;">$0</strong> ｜ 總教練價 <strong
+                                id="calc-coach-total" style="color: #38a169;">$0</strong></span>
+                    </div>
+
                     <button type="submit" class="submit-btn" style="background-color: #3182ce;">新增交易紀錄</button>
                 </form>
 
@@ -74,11 +83,10 @@
                         <thead>
                             <tr>
                                 <th>日期</th>
-                                <th>圖片</th>
-                                <th>商品名稱</th>
                                 <th>購買人</th>
-                                <th>售價</th>
-                                <th>教練價格</th>
+                                <th>購買商品明細</th>
+                                <th>總售價</th>
+                                <th>總教練價</th>
                                 <th>已收款</th>
                                 <th>已付廠商</th>
                                 <th>操作</th>
@@ -87,6 +95,9 @@
                         <tbody id="transaction-table-body">
                             <!-- 動態載入交易紀錄 -->
                         </tbody>
+                        <tfoot id="transaction-table-foot">
+                            <!-- 動態載入總加總列 -->
+                        </tfoot>
                     </table>
                 </div>
             </section>
