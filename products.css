@@ -110,7 +110,7 @@ body {
 }
 
 .submit-btn:hover {
-    background-color: #2f855a;
+    opacity: 0.9;
 }
 
 .panel-divider {
@@ -119,143 +119,110 @@ body {
     margin: 20px 0;
 }
 
-/* 商品卡片小格 */
-.product-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 12px;
-    max-height: 350px;
+/* 條列式商品列表樣式 */
+.product-list-vertical {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 380px;
     overflow-y: auto;
     padding-right: 4px;
 }
 
-.product-mini-card {
+.product-row-item {
     background: white;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
-    padding: 8px;
+    padding: 10px 14px;
     display: flex;
-    flex-direction: column;
-    gap: 6px;
     align-items: center;
-    text-align: center;
+    justify-content: space-between;
+    gap: 12px;
 }
 
-.product-mini-card img {
-    width: 60px;
-    height: 60px;
+.product-row-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+}
+
+.product-row-info img {
+    width: 45px;
+    height: 45px;
     object-fit: cover;
     border-radius: 6px;
     border: 1px solid #edf2f7;
+    flex-shrink: 0;
 }
 
-.product-mini-card h5 {
-    margin: 0;
-    font-size: 0.85rem;
+.product-row-details h5 {
+    margin: 0 0 2px 0;
+    font-size: 0.9rem;
     color: #2d3748;
 }
 
-.product-mini-card p {
+.product-row-details p {
     margin: 0;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     color: #718096;
 }
 
-.del-prod-btn {
-    background: #e53e3e;
-    color: white;
+.product-row-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.action-btn {
     border: none;
-    padding: 2px 6px;
-    font-size: 0.7rem;
+    padding: 5px 10px;
+    font-size: 0.8rem;
     border-radius: 4px;
     cursor: pointer;
+    font-weight: 500;
 }
 
-/* 交易表格 */
-.table-responsive {
-    overflow-x: auto;
-    max-height: 400px;
-    overflow-y: auto;
+.edit-prod-row-btn {
+    background-color: #3182ce;
+    color: white;
 }
 
-.transaction-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-    font-size: 0.85rem;
+.del-prod-row-btn {
+    background-color: #e53e3e;
+    color: white;
 }
 
-.transaction-table th, .transaction-table td {
-    border: 1px solid #e2e8f0;
-    padding: 8px 10px;
-    text-align: center;
-}
-
-.transaction-table th {
-    background-color: #edf2f7;
-    color: #2d3748;
-}
-
-.transaction-table img {
-    width: 40px;
-    height: 40px;
-    object-fit: cover;
-    border-radius: 4px;
-}
-
-.table-checkbox {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-}
-
-/* 多選商品勾選清單 */
-.multi-product-selector {
-    max-height: 200px;
+/* 本次交易已選商品明細小框 */
+.current-items-box {
+    max-height: 150px;
     overflow-y: auto;
     border: 1px solid #cbd5e0;
     border-radius: 6px;
     background: #ffffff;
-    padding: 8px;
+    padding: 6px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
-.multi-prod-item {
+.current-item-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 6px 8px;
-    border-bottom: 1px solid #edf2f7;
+    background: #f7fafc;
+    padding: 4px 8px;
+    border-radius: 4px;
     font-size: 0.85rem;
 }
 
-.multi-prod-item:last-child {
-    border-bottom: none;
-}
-
-.multi-prod-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.remove-item-btn {
+    background: transparent;
+    border: none;
+    color: #e53e3e;
     cursor: pointer;
-}
-
-.multi-prod-left img {
-    width: 32px;
-    height: 32px;
-    object-fit: cover;
-    border-radius: 4px;
-}
-
-.qty-input {
-    width: 55px;
-    padding: 4px 6px;
-    border: 1px solid #cbd5e0;
-    border-radius: 4px;
-    text-align: center;
-    font-size: 0.85rem;
+    font-weight: bold;
+    font-size: 1rem;
 }
 
 /* 即時試算條 */
@@ -294,9 +261,72 @@ body {
     flex-shrink: 0;
 }
 
-/* 表格總加總列 */
 .total-summary-row {
     background-color: #edf2f7;
     font-weight: bold;
     color: #1a202c;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* 交易表格 */
+.table-responsive {
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.transaction-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    font-size: 0.85rem;
+}
+
+.transaction-table th, .transaction-table td {
+    border: 1px solid #e2e8f0;
+    padding: 8px 10px;
+    text-align: center;
+}
+
+.transaction-table th {
+    background-color: #edf2f7;
+    color: #2d3748;
+}
+
+.table-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+/* 表格內嵌備註輸入框樣式 */
+.table-note-input {
+    width: 100%;
+    min-width: 100px;
+    padding: 4px 6px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    font-size: 0.85rem;
+    color: #333;
+}
+
+.table-note-input:hover, .table-note-input:focus {
+    border-color: #cbd5e0;
+    background: #fff;
+}
+
+/* 商品列表中的備註文字樣式 */
+.product-row-note {
+    display: block;
+    font-size: 0.78rem;
+    color: #4a5568;
+    background-color: #edf2f7;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-top: 4px;
+    width: fit-content;
 }
