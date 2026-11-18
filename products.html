@@ -27,7 +27,18 @@
                         <label>商品名稱：</label>
                         <input type="text" id="prod-name" placeholder="例如：專業滑冰手套" required>
                     </div>
-                    <!-- 💡 新增：商品備註輸入框 -->
+                    <!-- 💡 新增：分類標籤輸入框（支援datalist快速選取或自行輸入新標籤） -->
+                    <div class="form-group">
+                        <label>分類標籤 (選填)：</label>
+                        <input type="text" id="prod-tag" list="tag-suggestions" placeholder="">
+                        <datalist id="tag-suggestions">
+                            <option value="皮鞋">
+                            <option value="冰刀">
+                            <option value="護具配件">
+                            <option value="服務">
+                            <option value="其他週邊">
+                        </datalist>
+                    </div>
                     <div class="form-group">
                         <label>商品備註 (選填)：</label>
                         <input type="text" id="prod-note" placeholder="例如：尺寸 S/M/L、預購約 7 天">
@@ -46,13 +57,21 @@
                     </div>
                     <div style="display: flex; gap: 8px;">
                         <button type="submit" id="prod-submit-btn" class="submit-btn" style="flex: 1;">新增商品</button>
-                        <button type="button" id="prod-cancel-edit-btn" class="submit-btn hidden" style="background: #cbd5e0; color: #2d3748; flex: 1;">取消編輯</button>
+                        <button type="button" id="prod-cancel-edit-btn" class="submit-btn hidden"
+                            style="background: #cbd5e0; color: #2d3748; flex: 1;">取消編輯</button>
                     </div>
                 </form>
 
                 <hr class="panel-divider">
 
-                <h4>現有商品列表</h4>
+                <!-- 💡 修改：標題列加上標籤篩選下拉選單 -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h4 style="margin: 0;">現有商品列表</h4>
+                    <select id="filter-tag-select"
+                        style="padding: 4px 8px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 0.82rem;">
+                        <option value="ALL">全部標籤</option>
+                    </select>
+                </div>
                 <div id="product-list-container" class="product-list-vertical">
                     <!-- 動態載入條列式商品 -->
                 </div>
