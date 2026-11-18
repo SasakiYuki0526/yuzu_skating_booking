@@ -330,3 +330,17 @@ body {
     margin-top: 4px;
     width: fit-content;
 }
+
+/* 商品分類標籤徽章 */
+.product-tag-badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #2b6cb0;
+    background-color: #ebf8ff;
+    border: 1px solid #bee3f8;
+    padding: 1px 6px;
+    border-radius: 12px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
