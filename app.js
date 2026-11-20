@@ -220,10 +220,18 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         height: 'auto',
         selectable: true,
-        dateClick: function (info) {
+        dateClick: function(info) {
             selectedDate = info.dateStr;
             if (inputDate) inputDate.value = selectedDate;
             renderRightSlots(selectedDate);
+
+            // 長條版型（螢幕寬度 <= 768px）時，自動平滑滑動到右側時段區塊
+            if (window.innerWidth <= 768) {
+                const slotsSection = document.querySelector('.slots-main');
+                if (slotsSection) {
+                    slotsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }
         },
         dayCellDidMount: function (info) {
             const d = info.date;
