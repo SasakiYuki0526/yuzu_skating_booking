@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>學員名單與上課情形管理</title>
+    <link rel="stylesheet" href="students.css">
+</head>
+<body>
+
+    <div id="students-app" class="students-layout hidden">
+        <header class="students-header">
+            <h2>🎓 學員名單與上課情形紀錄</h2>
+            <div class="header-actions">
+                <button type="button" id="sync-history-btn" class="nav-btn" style="background:#ebf8ff; border-color:#90cdf4; color:#2b6cb0;">🔄 匯入既有預約學員</button>
+                <button type="button" id="go-products-btn" class="nav-btn">📦 商品管理</button>
+                <button type="button" id="back-home-btn" class="nav-btn">⬅️ 返回預約行事曆</button>
+            </div>
+        </header>
+
+        <div class="students-grid">
+            <!-- 左側：學員名單與新增/編輯 -->
+            <section class="card">
+                <h3 id="student-form-title">👤 新增學員</h3>
+                <form id="student-form" class="form-stack">
+                    <input type="hidden" id="edit-student-id" value="">
+                    <div class="form-group">
+                        <label>學員姓名（同名將歸為同一位）：</label>
+                        <input type="text" id="student-name" placeholder="例如：陳小美" required>
+                    </div>
+                    <div class="form-group">
+                        <label>分類標籤 (選填)：</label>
+                        <input type="text" id="student-tag" list="student-tag-suggestions" placeholder="例如：檢定班、冰舞、成人基礎">
+                        <datalist id="student-tag-suggestions">
+                            <option value="檢定班">
+                            <option value="基礎班">
+                            <option value="成人班">
+                            <option value="冰舞">
+                        </datalist>
+                    </div>
+                    <div class="form-group">
+                        <label>程度 / 級別 (選填)：</label>
+                        <input type="text" id="student-level" placeholder="例如：基礎 / 初級檢定">
+                    </div>
+                    <div class="form-group">
+                        <label>聯絡方式 / 家長備註 (選填)：</label>
+                        <input type="text" id="student-contact" placeholder="例如：Line ID 或電話">
+                    </div>
+                    <div class="form-group">
+                        <label>整體備註 (選填)：</label>
+                        <input type="text" id="student-note" placeholder="例如：右腳踝較緊、怕生">
+                    </div>
+                    <div class="btn-row">
+                        <button type="submit" id="student-submit-btn" class="submit-btn">儲存學員</button>
+                        <button type="button" id="student-cancel-btn" class="cancel-btn hidden">取消</button>
+                    </div>
+                </form>
+
+                <hr class="divider">
+
+                <div class="list-header">
+                    <h4>學員名單</h4>
+                    <div class="filter-controls">
+                        <select id="student-tag-filter" class="filter-select">
+                            <option value="ALL">全部標籤</option>
+                        </select>
+                        <input type="text" id="student-search-input" placeholder="搜尋姓名..." class="search-input">
+                    </div>
+                </div>
+                <div id="student-list" class="student-list">
+                    <!-- 動態渲染學員 -->
+                </div>
+            </section>
+
+            <!-- 右側：選定學員的上課情形紀錄 -->
+            <section class="card">
+                <div class="log-header">
+                    <div>
+                        <h3 id="selected-student-title">📖 上課情形紀錄</h3>
+                        <p id="selected-student-meta" class="meta-text">請從左側選擇一位學員查看與記錄上課情形</p>
+                    </div>
+                </div>
+
+                <!-- 手動補登單筆上課紀錄 -->
+                <form id="add-log-form" class="log-form hidden">
+                    <div class="log-form-grid">
+                        <div class="form-group">
+                            <label>上課日期：</label>
+                            <input type="date" id="log-date" required>
+                        </div>
+                        <div class="form-group">
+                            <label>時段：</label>
+                            <input type="text" id="log-time" placeholder="例如：10:00 - 10:40">
+                        </div>
+                        <div class="form-group">
+                            <label>課程類型：</label>
+                            <input type="text" id="log-type" placeholder="1v1 / 1v2 / 團體課">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>上課情形 / 教學重點：</label>
+                        <textarea id="log-content" rows="2" placeholder="記錄本堂練習動作、修正重點或下次目標..."></textarea>
+                    </div>
+                    <button type="submit" class="submit-btn log-submit-btn">＋ 新增上課紀錄</button>
+                </form>
+
+                <hr class="divider">
+
+                <div id="lesson-logs-container" class="lesson-logs-container">
+                    <p class="empty-tip">尚未選擇學員</p>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script type="module" src="students.js"></script>
+</body>
+</html>

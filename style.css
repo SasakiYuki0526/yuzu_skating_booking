@@ -553,7 +553,7 @@ body.admin-mode .slot-card.booked .admin-actions {
 }
 
 .floating-btn:hover {
-    background-color: #62a7f0;
+    background-color: #ffffff;
     transform: scale(1.08); /* 滑鼠懸停時微幅放大 */
 }
 

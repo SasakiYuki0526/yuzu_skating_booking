@@ -1,4 +1,4 @@
-// app.js - 完整最終整合版（含完整區間不開放時段、團體課、姓名隱私遮罩）
+// app.js - 完整最終整合版（含完整區間不開放時段、團體課、姓名隱私遮罩、薪資CSV匯出、學員上課紀錄自動同步）
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import {
     getFirestore,
@@ -86,6 +86,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const repeatWeeklyBtn = document.getElementById('batch-repeat-weekly-btn');
     const setFullBookingBtn = document.getElementById('set-full-booking-btn');
 
+    // 右下角浮動按鈕
+    const floatingProductsBtn = document.getElementById('floating-products-btn');
+    const floatingStudentsBtn = document.getElementById('floating-students-btn');
+
     // 自動在管理者面板注入「指定時段不開放」按鈕
     let setPartialBlockBtn = document.getElementById('set-partial-block-btn');
     if (!setPartialBlockBtn && addSlotForm) {
@@ -111,6 +115,58 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminModalSlotInfo = document.getElementById('admin-modal-slot-info');
     const adminBookingList = document.getElementById('admin-booking-list');
     const adminModalCloseBtn = document.getElementById('admin-modal-close-btn');
+
+    // ==========================================
+    // 管理者登入狀態同步函式
+    // ==========================================
+    function applyAdminState(loggedIn, shouldRender = true) {
+        isAdmin = Boolean(loggedIn);
+        sessionStorage.setItem('skatingAdminAuth', isAdmin ? 'true' : 'false');
+
+        if (isAdmin) {
+            if (adminToggleBtn) {
+                adminToggleBtn.textContent = "🔓 管理者已登入";
+                adminToggleBtn.classList.add('unlocked');
+            }
+            if (adminPanel) adminPanel.classList.remove('hidden');
+            document.body.classList.add('admin-mode');
+            if (floatingProductsBtn) floatingProductsBtn.classList.remove('hidden');
+            if (floatingStudentsBtn) floatingStudentsBtn.classList.remove('hidden');
+        } else {
+            if (adminToggleBtn) {
+                adminToggleBtn.textContent = "🔒 管理員登入";
+                adminToggleBtn.classList.remove('unlocked');
+            }
+            if (adminPanel) adminPanel.classList.add('hidden');
+            document.body.classList.remove('admin-mode');
+            if (floatingProductsBtn) floatingProductsBtn.classList.add('hidden');
+            if (floatingStudentsBtn) floatingStudentsBtn.classList.add('hidden');
+        }
+
+        if (shouldRender) {
+            renderRightSlots(selectedDate);
+        }
+    }
+
+    if (floatingProductsBtn) {
+        floatingProductsBtn.addEventListener('click', () => {
+            if (!isAdmin) {
+                alert("請先登入管理員！");
+                return;
+            }
+            window.location.href = 'products.html';
+        });
+    }
+
+    if (floatingStudentsBtn) {
+        floatingStudentsBtn.addEventListener('click', () => {
+            if (!isAdmin) {
+                alert("請先登入管理員！");
+                return;
+            }
+            window.location.href = 'students.html';
+        });
+    }
 
     // ==========================================
     // 自動擴充下拉選單：加入「團體課」、「團體體驗課」
@@ -220,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         height: 'auto',
         selectable: true,
-        dateClick: function(info) {
+        dateClick: function (info) {
             selectedDate = info.dateStr;
             if (inputDate) inputDate.value = selectedDate;
             renderRightSlots(selectedDate);
@@ -245,6 +301,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     calendar.render();
+
+    // 還原先前同分頁已驗證的管理員狀態
+    if (sessionStorage.getItem('skatingAdminAuth') === 'true') {
+        applyAdminState(true, false);
+    }
     renderRightSlots(selectedDate);
 
     function renderCellDots(cellEl, dateStr) {
@@ -333,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 💡 依據時段的開始時間嚴格排序
+        // 依據時段的開始時間嚴格排序
         slots.sort((a, b) => {
             const startA = timeToMinutes(a.time.split(' - ')[0]);
             const startB = timeToMinutes(b.time.split(' - ')[0]);
@@ -385,7 +446,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 ` : ''}
             `;
 
-            // 卡片點擊事件
             card.addEventListener('click', async (e) => {
                 if (e.target.closest('.admin-actions') || e.target.tagName === 'INPUT') return;
 
@@ -457,14 +517,45 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (ev.target.checked) {
                                 if (confirm(`確定要解除此時段的鎖定並重新釋出為可預約嗎？`)) {
                                     try {
+                                        // 1. 取得該時段的原始日期、時間與學員名單
+                                        let targetDateStr = dateStr;
+                                        let targetTimeStr = slot.time || "";
+                                        const rawNames = (slot.studentName && slot.studentName !== "不開放")
+                                            ? String(slot.studentName).split('、').map(n => n.trim()).filter(n => n !== "")
+                                            : [];
+
+                                        // 2. 釋出排程時段
                                         await updateDoc(doc(db, "schedule", currentBookingSlotId), {
                                             isAvailable: true,
                                             studentName: "",
                                             lessonType: ""
                                         });
 
+                                        // 3. 同步刪除對應日期與時段的上課紀錄
+                                        if (rawNames.length > 0 && targetDateStr && targetTimeStr) {
+                                            const logsSnap = await getDocs(
+                                                query(
+                                                    collection(db, "lessonLogs"),
+                                                    where("date", "==", targetDateStr),
+                                                    where("time", "==", targetTimeStr)
+                                                )
+                                            );
+
+                                            const deletePromises = [];
+                                            logsSnap.forEach((logDoc) => {
+                                                const logData = logDoc.data();
+                                                if (rawNames.includes((logData.studentName || "").trim())) {
+                                                    deletePromises.push(deleteDoc(doc(db, "lessonLogs", logDoc.id)));
+                                                }
+                                            });
+
+                                            if (deletePromises.length > 0) {
+                                                await Promise.all(deletePromises);
+                                            }
+                                        }
+
                                         adminBookingModal.classList.add('hidden');
-                                        alert("已成功解除鎖定並釋出時段！");
+                                        alert("已成功解除鎖定、釋出時段，並同步移除對應上課紀錄！");
                                     } catch (err) {
                                         console.error("釋出時段失敗：", err);
                                         alert("釋出失敗，請檢查主控台。");
@@ -563,7 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // 💡 設定指定時段不開放（完整區間不切分，如 10:00 - 12:00）
+    // 設定指定時段不開放（完整區間不切分，如 10:00 - 12:00）
     // ==========================================
     if (setPartialBlockBtn) {
         setPartialBlockBtn.addEventListener('click', async () => {
@@ -584,7 +675,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // 💡 不再切分，直接組合成一個完整時段字串 (ex. 10:00 - 12:00)
             const timeStr = `${startVal} - ${endVal}`;
 
             if (!confirm(`確定要將 ${dateVal} 的【${timeStr}】設定為【全場不開放】（一整個時段不切分）嗎？`)) {
@@ -623,7 +713,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // 彈窗事件監聽與 Discord 新預約通知
+    // 彈窗事件監聽、Discord 通知與自動建立學員/上課紀錄
     // ==========================================
     if (modalCancelBtn) {
         modalCancelBtn.addEventListener('click', () => {
@@ -652,10 +742,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const combinedStudentNames = names.join('、');
 
+            let targetDateStr = selectedDate;
+            let targetTimeStr = "";
             let targetSlotInfo = "未知時段";
             for (const date in allScheduleData) {
                 const found = allScheduleData[date].find(s => s.id === currentBookingSlotId);
                 if (found) {
+                    targetDateStr = date;
+                    targetTimeStr = found.time;
                     targetSlotInfo = `日期：${date} ｜ 時段：${found.time}`;
                     break;
                 }
@@ -667,6 +761,39 @@ document.addEventListener('DOMContentLoaded', () => {
                     studentName: combinedStudentNames,
                     lessonType: lessonType
                 });
+
+                // 針對每位預約學員自動確認學員名單並新增該日上課紀錄
+                for (const singleName of names) {
+                    const cleanName = singleName.trim();
+                    if (!cleanName) continue;
+
+                    try {
+                        const studentSnap = await getDocs(
+                            query(collection(db, "students"), where("name", "==", cleanName))
+                        );
+                        if (studentSnap.empty) {
+                            await addDoc(collection(db, "students"), {
+                                name: cleanName,
+                                level: "",
+                                contact: "",
+                                note: "由預約系統自動建立",
+                                createdAt: new Date().toISOString()
+                            });
+                        }
+
+                        await addDoc(collection(db, "lessonLogs"), {
+                            studentName: cleanName,
+                            date: targetDateStr,
+                            time: targetTimeStr,
+                            lessonType: lessonType,
+                            status: "已預約",
+                            content: "",
+                            createdAt: new Date().toISOString()
+                        });
+                    } catch (logErr) {
+                        console.warn(`自動建立 ${cleanName} 的上課紀錄失敗：`, logErr);
+                    }
+                }
 
                 try {
                     const DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1570461741995917352/gdHO5nE9_leWt1viBpDxAKE1lAzg67I7UiosB9uQ5d_T7g2588qYNc6F3_CNw7-CRyM2";
@@ -698,40 +825,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 管理者面板登入切換
-if (adminToggleBtn) {
-    adminToggleBtn.addEventListener('click', () => {
-        const floatingProductsBtn = document.getElementById('floating-products-btn');
-
-        if (!isAdmin) {
-            const pwd = prompt("請輸入管理者密碼：");
-            if (pwd === "101010") {
-                isAdmin = true;
-                adminToggleBtn.textContent = "🔓 管理者已登入";
-                adminToggleBtn.classList.add('unlocked');
-                adminPanel.classList.remove('hidden');
-                document.body.classList.add('admin-mode');
-                
-                // 💡 登入成功時，顯示右下角浮動按鈕
-                if (floatingProductsBtn) floatingProductsBtn.classList.remove('hidden');
-
-                renderRightSlots(selectedDate);
-            } else if (pwd !== null) {
-                alert("密碼錯誤！");
+    if (adminToggleBtn) {
+        adminToggleBtn.addEventListener('click', () => {
+            if (!isAdmin) {
+                const pwd = prompt("請輸入管理者密碼：");
+                if (pwd === "101010") {
+                    applyAdminState(true, true);
+                } else if (pwd !== null) {
+                    alert("密碼錯誤！");
+                }
+            } else {
+                applyAdminState(false, true);
             }
-        } else {
-            isAdmin = false;
-            adminToggleBtn.textContent = "🔒 管理員登入";
-            adminToggleBtn.classList.remove('unlocked');
-            adminPanel.classList.add('hidden');
-            document.body.classList.remove('admin-mode');
-
-            // 💡 登出時，隱藏右下角浮動按鈕
-            if (floatingProductsBtn) floatingProductsBtn.classList.add('hidden');
-
-            renderRightSlots(selectedDate);
-        }
-    });
-}
+        });
+    }
 
     // 長時段自動切片批次新增（維持 40 分鐘切片供一般預約使用）
     if (addSlotForm) {
@@ -937,7 +1044,137 @@ if (adminToggleBtn) {
         });
     }
 
+    // ==========================================
+    // 薪資與報表匯出功能模組
+    // ==========================================
+    const salaryRates = {
+        "1v1": 400,
+        "1v2": 600,
+        "1v3": 700,
+        "團體": 700,
+        "團體課": 700,
+        "團體體驗": 700,
+        "團體體驗課": 700
+    };
+
+    const salaryMonthInput = document.getElementById('salary-month-input');
+    const previewSalaryBtn = document.getElementById('preview-salary-btn');
+    const exportSalaryCsvBtn = document.getElementById('export-salary-csv-btn');
+    const salaryPreviewContainer = document.getElementById('salary-preview-container');
+
+    if (salaryMonthInput) {
+        salaryMonthInput.value = selectedDate.substring(0, 7);
+    }
+
+    function getBookedDataForMonth(yearMonthStr) {
+        const results = [];
+        for (const dateStr in allScheduleData) {
+            if (dateStr.startsWith(yearMonthStr)) {
+                const slots = allScheduleData[dateStr];
+                slots.forEach(slot => {
+                    if (!slot.isAvailable && slot.studentName && slot.studentName !== "不開放") {
+                        results.push({
+                            date: dateStr,
+                            time: slot.time,
+                            type: slot.lessonType || "1v1",
+                            name: slot.studentName
+                        });
+                    }
+                });
+            }
+        }
+        results.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+        return results;
+    }
+
+    if (previewSalaryBtn) {
+        previewSalaryBtn.addEventListener('click', () => {
+            const ym = salaryMonthInput?.value;
+            if (!ym) {
+                alert("請先選擇結算月份！");
+                return;
+            }
+
+            const records = getBookedDataForMonth(ym);
+            if (!salaryPreviewContainer) return;
+
+            if (records.length === 0) {
+                salaryPreviewContainer.innerHTML = `<p style="color: #718096; margin: 0;">${ym} 無任何已成交預約紀錄。</p>`;
+                return;
+            }
+
+            let total = 0;
+            let html = `<table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
+                <tr style="background:#edf2f7; text-align:left;">
+                    <th style="padding:4px;">日期</th>
+                    <th style="padding:4px;">時段</th>
+                    <th style="padding:4px;">種類</th>
+                    <th style="padding:4px;">學員</th>
+                    <th style="padding:4px; text-align:right;">薪資</th>
+                </tr>`;
+
+            records.forEach(r => {
+                const rate = salaryRates[r.type] || 400;
+                total += rate;
+                html += `<tr style="border-bottom:1px solid #edf2f7;">
+                    <td style="padding:4px;">${r.date}</td>
+                    <td style="padding:4px;">${r.time}</td>
+                    <td style="padding:4px;">${r.type}</td>
+                    <td style="padding:4px;">${r.name}</td>
+                    <td style="padding:4px; text-align:right;">$${rate}</td>
+                </tr>`;
+            });
+
+            html += `<tr style="font-weight:bold; background:#e2e8f0;">
+                <td colspan="4" style="padding:6px; text-align:right;">本月總薪資：</td>
+                <td style="padding:6px; text-align:right; color:#2b6cb0;">$${total}</td>
+            </tr></table>`;
+
+            salaryPreviewContainer.innerHTML = html;
+        });
+    }
+
+    if (exportSalaryCsvBtn) {
+        exportSalaryCsvBtn.addEventListener('click', () => {
+            const ym = salaryMonthInput?.value;
+            if (!ym) {
+                alert("請先選擇結算月份！");
+                return;
+            }
+
+            const records = getBookedDataForMonth(ym);
+            if (records.length === 0) {
+                alert(`${ym} 沒有可匯出的預約紀錄！`);
+                return;
+            }
+
+            let csvContent = "\uFEFF日期,時間,課程種類,學員名字,薪資\n";
+            let totalSalary = 0;
+
+            records.forEach(r => {
+                const rate = salaryRates[r.type] || 400;
+                totalSalary += rate;
+                const safeName = `"${r.name.replace(/"/g, '""')}"`;
+                csvContent += `${r.date},${r.time},${r.type},${safeName},${rate}\n`;
+            });
+
+            csvContent += `,,,總計,${totalSalary}\n`;
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `教練薪資報表_${ym}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+    }
+
+    // ==========================================
     // Firebase 即時連動
+    // ==========================================
     onSnapshot(collection(db, "schedule"), (snapshot) => {
         allScheduleData = {};
         snapshot.forEach((doc) => {
@@ -958,145 +1195,4 @@ if (adminToggleBtn) {
         refreshAllDots();
         renderRightSlots(selectedDate);
     });
-    // ==========================================
-    // 💡 薪資與報表匯出功能模組
-    // ==========================================
-    const salaryRates = {
-        "1v1": 400,
-        "1v2": 600,
-        "1v3": 700,
-        "團體": 700,
-        "團體課": 700,
-        "團體體驗": 700,
-        "團體體驗課": 700
-    };
-
-    const salaryMonthInput = document.getElementById('salary-month-input');
-    const previewSalaryBtn = document.getElementById('preview-salary-btn');
-    const exportSalaryCsvBtn = document.getElementById('export-salary-csv-btn');
-    const salaryPreviewContainer = document.getElementById('salary-preview-container');
-
-    // 初始化預設月份為當前年月 (ex. 2026-11)
-    if (salaryMonthInput) {
-        salaryMonthInput.value = selectedDate.substring(0, 7);
-    }
-
-    // 取得指定月份已預約的資料
-    function getBookedDataForMonth(yearMonthStr) {
-        const results = [];
-        for (const dateStr in allScheduleData) {
-            if (dateStr.startsWith(yearMonthStr)) {
-                const slots = allScheduleData[dateStr];
-                slots.forEach(slot => {
-                    // 篩選出已預約且非不開放時段的紀錄
-                    if (!slot.isAvailable && slot.studentName && slot.studentName !== "不開放") {
-                        results.push({
-                            date: dateStr,
-                            time: slot.time,
-                            type: slot.lessonType || "1v1",
-                            name: slot.studentName
-                        });
-                    }
-                });
-            }
-        }
-        // 依日期時間排序
-        results.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
-        return results;
-    }
-
-    // 預覽薪資與約課明細
-    if (previewSalaryBtn) {
-        previewSalaryBtn.addEventListener('click', () => {
-            const ym = salaryMonthInput.value;
-            if (!ym) {
-                alert("請先選擇結算月份！");
-                return;
-            }
-
-            const records = getBookedDataForMonth(ym);
-            if (records.length === 0) {
-                salaryPreviewContainer.innerHTML = `<p style="color: #718096; margin: 0;">${ym} 無任何已成交預約紀錄。</p>`;
-                return;
-            }
-
-            let total = 0;
-            let html = `<table style="width:100%; border-collapse:collapse; font-size:0.8rem;">
-            <tr style="background:#edf2f7; text-align:left;">
-                <th style="padding:4px;">日期</th>
-                <th style="padding:4px;">時段</th>
-                <th style="padding:4px;">種類</th>
-                <th style="padding:4px;">學員</th>
-                <th style="padding:4px; text-align:right;">薪資</th>
-            </tr>`;
-
-            records.forEach(r => {
-                const rate = salaryRates[r.type] || 400;
-                total += rate;
-                html += `<tr style="border-bottom:1px solid #edf2f7;">
-                <td style="padding:4px;">${r.date}</td>
-                <td style="padding:4px;">${r.time}</td>
-                <td style="padding:4px;">${r.type}</td>
-                <td style="padding:4px;">${r.name}</td>
-                <td style="padding:4px; text-align:right;">$${rate}</td>
-            </tr>`;
-            });
-
-            html += `<tr style="font-weight:bold; background:#e2e8f0;">
-            <td colspan="4" style="padding:6px; text-align:right;">本月總薪資：</td>
-            <td style="padding:6px; text-align:right; color:#2b6cb0;">$${total}</td>
-        </tr></table>`;
-
-            salaryPreviewContainer.innerHTML = html;
-        });
-    }
-
-    // 手動匯出 CSV 報表
-    if (exportSalaryCsvBtn) {
-        exportSalaryCsvBtn.addEventListener('click', () => {
-            const ym = salaryMonthInput.value;
-            if (!ym) {
-                alert("請先選擇結算月份！");
-                return;
-            }
-
-            const records = getBookedDataForMonth(ym);
-            if (records.length === 0) {
-                alert(`${ym} 沒有可匯出的預約紀錄！`);
-                return;
-            }
-
-            // 加上 \uFEFF 避免 Excel 打開中文亂碼
-            let csvContent = "\uFEFF日期,時間,課程種類,學員名字,薪資\n";
-            let totalSalary = 0;
-
-            records.forEach(r => {
-                const rate = salaryRates[r.type] || 400;
-                totalSalary += rate;
-                // 處理名字若包含逗號時加雙引號
-                const safeName = `"${r.name.replace(/"/g, '""')}"`;
-                csvContent += `${r.date},${r.time},${r.type},${safeName},${rate}\n`;
-            });
-
-            csvContent += `,,,總計,${totalSalary}\n`;
-
-            // 觸發瀏覽器下載
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `教練薪資報表_${ym}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-        });
-    }
-    // 跳轉至商品與交易管理頁面
-    const floatingProductsBtn = document.getElementById('floating-products-btn');
-    if (floatingProductsBtn) {
-        floatingProductsBtn.addEventListener('click', () => {
-            window.location.href = 'products.html';
-        });
-    }
-
 });
