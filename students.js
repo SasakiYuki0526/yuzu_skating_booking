@@ -23,6 +23,14 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+function getLocalTodayString() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const appContainer = document.getElementById('students-app');
 
@@ -71,6 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (name) existingStudentNames.add(name);
             });
 
+            // 以「姓名 + 日期 + 時段」作為去重鍵值
             const existingLogKeys = new Set();
             existingLogsSnap.forEach(docSnap => {
                 const d = docSnap.data();
@@ -158,8 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const logContentInput = document.getElementById('log-content');
     const lessonLogsContainer = document.getElementById('lesson-logs-container');
 
-    const todayObj = new Date();
-    const todayStr = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, '0')}-${String(todayObj.getDate()).padStart(2, '0')}`;
+    const todayStr = getLocalTodayString();
     if (logDateInput) logDateInput.value = todayStr;
 
     let studentsData = [];
@@ -265,6 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderStudentsList() {
         const keyword = (studentSearchInput?.value || "").trim().toLowerCase();
         const selectedTag = studentTagFilter?.value || 'ALL';
+        const currentToday = getLocalTodayString();
         studentListEl.innerHTML = '';
 
         const uniqueMap = new Map();
@@ -293,7 +302,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         list.forEach(s => {
-            const logCount = allLogsData.filter(l => l.studentName === s.name).length;
+            // 只計算包含當天及過去（date <= currentToday）的上課紀錄筆數
+            const logCount = allLogsData.filter(
+                l => l.studentName === s.name && l.date && l.date <= currentToday
+            ).length;
             const tagBadge = s.tag ? `<span class="student-tag-badge">${s.tag}</span>` : '';
             const item = document.createElement('div');
             item.className = `student-item ${selectedStudentName === s.name ? 'active' : ''}`;
@@ -405,12 +417,15 @@ document.addEventListener('DOMContentLoaded', () => {
             : `學員：${selectedStudentName}`;
         addLogForm.classList.remove('hidden');
 
+        const currentToday = getLocalTodayString();
+
+        // 只顯示包含當天及過去（date <= currentToday）的課程紀錄，未來日期先隱藏
         const logs = allLogsData
-            .filter(l => l.studentName === selectedStudentName)
+            .filter(l => l.studentName === selectedStudentName && l.date && l.date <= currentToday)
             .sort((a, b) => b.date.localeCompare(a.date) || (b.time || "").localeCompare(a.time || ""));
 
         if (logs.length === 0) {
-            lessonLogsContainer.innerHTML = `<p class="empty-tip">這位學員目前尚無上課紀錄（有預約時會自動建立，也可於上方手動新增）</p>`;
+            lessonLogsContainer.innerHTML = `<p class="empty-tip">這位學員目前尚無已進行或當天的上課紀錄（尚未到來的預約日期會在當天起顯示）</p>`;
             return;
         }
 
