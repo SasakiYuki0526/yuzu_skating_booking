@@ -426,9 +426,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (isBlocked) {
                     statusText = '全場不開放';
                 } else if (isAdmin) {
+                    // 管理員登入後顯示完整學生全名
                     const typeTag = slot.lessonType ? `[${slot.lessonType}] ` : '';
                     statusText = slot.studentName ? `已預約 ${typeTag}(${slot.studentName})` : '已預約';
                 } else {
+                    // 一般訪客顯示遮罩姓名
                     const typeTag = slot.lessonType ? `[${slot.lessonType}] ` : '';
                     statusText = slot.studentName ? `${typeTag}${maskName(slot.studentName)}` : '已預約';
                 }
@@ -801,7 +803,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     await fetch(DISCORD_WEBHOOK_URL, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json; charset=utf-8' },
                         body: JSON.stringify({ content: message })
                     });
                 } catch (discordErr) {
